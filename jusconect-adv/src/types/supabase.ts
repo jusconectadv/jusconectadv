@@ -298,6 +298,49 @@ export type Database = {
         Relationships: [];
       };
 
+      document_templates: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          title: string;
+          description: string | null;
+          category: string;
+          content: string;
+          is_active: boolean;
+          created_by: string;
+          created_at: string;
+          updated_at: string | null;
+        };
+
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          title: string;
+          description?: string | null;
+          category?: string;
+          content: string;
+          is_active?: boolean;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+
+        Update: {
+          id?: string;
+          tenant_id?: string;
+          title?: string;
+          description?: string | null;
+          category?: string;
+          content?: string;
+          is_active?: boolean;
+          created_by?: string;
+          created_at?: string;
+          updated_at?: string | null;
+        };
+
+        Relationships: [];
+      };
+
       profiles: {
         Row: {
           id: string;

@@ -63,6 +63,11 @@ const navigationGroups: readonly NavigationGroup[] = [
     title: "Sistema",
     items: [
       {
+        href: "/dashboard/templates",
+        label: "Templates",
+        roles: ["lawyer"],
+      },
+      {
         href: "/dashboard/team",
         label: "Equipe",
         roles: ["lawyer"],

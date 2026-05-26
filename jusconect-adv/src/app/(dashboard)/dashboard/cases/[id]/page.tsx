@@ -142,16 +142,25 @@ export default async function CaseDetailPage({
         </div>
 
         <div className="flex flex-col items-start gap-3 lg:items-end">
-          <form action={generateCaseAnalysisAction}>
-            <input type="hidden" name="caseId" value={legalCase.id} />
-
-            <button
-              type="submit"
-              className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/dashboard/cases/${legalCase.id}/templates`}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
             >
-              Gerar análise IA
-            </button>
-          </form>
+              Gerar documento
+            </Link>
+
+            <form action={generateCaseAnalysisAction}>
+              <input type="hidden" name="caseId" value={legalCase.id} />
+
+              <button
+                type="submit"
+                className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+              >
+                Gerar análise IA
+              </button>
+            </form>
+          </div>
 
           <div className="flex flex-wrap gap-2">
             <form action={updateCaseStatusAction}>
