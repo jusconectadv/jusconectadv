@@ -5,7 +5,8 @@ import type { Database } from "@/src/types/supabase";
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 type TenantRow = Database["public"]["Tables"]["tenants"]["Row"];
-type TenantMemberRow = Database["public"]["Tables"]["tenant_members"]["Row"];
+type TenantMemberRow =
+  Database["public"]["Tables"]["tenant_members"]["Row"];
 
 export type UserRole = "master" | "lawyer" | "client";
 
@@ -58,22 +59,17 @@ export async function requireUserContext(): Promise<UserContext> {
     redirect("/login");
   }
 
-  const { data: profileRaw, error: profileError } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", user.id)
     .single();
 
-  if (profileError || !profileRaw) {
+  if (profileError || !profile) {
     redirect("/login");
   }
 
-  const role = normalizeUserRole(profileRaw.role);
-
-  const profile: UserContextProfile = {
-    ...profileRaw,
-    role,
-  };
+  const role = normalizeUserRole(profile.role);
 
   const { data: tenantMemberRaw, error: tenantMemberError } = await supabase
     .from("tenant_members")
@@ -97,19 +93,16 @@ export async function requireUserContext(): Promise<UserContext> {
 
   const tenantId = tenantMember?.tenant_id ?? null;
 
-  const { data: tenant, error: tenantError } = tenantId
+  const tenantResult = tenantId
     ? await supabase
         .from("tenants")
         .select("*")
         .eq("id", tenantId)
         .maybeSingle()
-    : {
-        data: null,
-        error: null,
-      };
+    : null;
 
-  if (tenantError) {
-    throw new Error(tenantError.message);
+  if (tenantResult?.error) {
+    throw new Error(tenantResult.error.message);
   }
 
   return {
@@ -117,9 +110,20 @@ export async function requireUserContext(): Promise<UserContext> {
       id: user.id,
       email: user.email ?? null,
     },
-    profile,
+    profile: {
+      ...profile,
+      role,
+    },
     role,
-    tenant,
+    tenant: tenantResult?.data ?? null,
     tenantMember,
   };
+}
+
+export async function getUserContext(): Promise<UserContext | null> {
+  try {
+    return await requireUserContext();
+  } catch {
+    return null;
+  }
 }

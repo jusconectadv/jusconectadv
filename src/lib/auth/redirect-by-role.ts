@@ -1,14 +1,19 @@
 import { redirect } from "next/navigation";
-import type { UserRole } from "@/src/types/auth";
+
+import type { UserRole } from "@/src/lib/auth/get-user-context";
 
 export function redirectByRole(role: UserRole): never {
   if (role === "master") {
-    redirect("/dashboard/master");
+    redirect("/dashboard");
   }
 
   if (role === "lawyer") {
-    redirect("/dashboard/lawyer");
+    redirect("/dashboard");
   }
 
-  redirect("/dashboard/client");
+  if (role === "client") {
+    redirect("/dashboard/client");
+  }
+
+  redirect("/login");
 }
