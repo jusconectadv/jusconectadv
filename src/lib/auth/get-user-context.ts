@@ -59,17 +59,22 @@ export async function requireUserContext(): Promise<UserContext> {
     redirect("/login");
   }
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: profileRaw, error: profileError } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", user.id)
     .single();
 
-  if (profileError || !profile) {
+  if (profileError || !profileRaw) {
     redirect("/login");
   }
 
-  const role = normalizeUserRole(profile.role);
+  const role = normalizeUserRole(profileRaw.role);
+
+  const profile: UserContextProfile = {
+    ...profileRaw,
+    role,
+  };
 
   const { data: tenantMemberRaw, error: tenantMemberError } = await supabase
     .from("tenant_members")
@@ -110,10 +115,7 @@ export async function requireUserContext(): Promise<UserContext> {
       id: user.id,
       email: user.email ?? null,
     },
-    profile: {
-      ...profile,
-      role,
-    },
+    profile,
     role,
     tenant: tenantResult?.data ?? null,
     tenantMember,
