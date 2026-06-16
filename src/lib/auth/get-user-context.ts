@@ -58,17 +58,22 @@ export async function requireUserContext(): Promise<UserContext> {
     redirect("/login");
   }
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: profileRaw, error: profileError } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", user.id)
     .single();
 
-  if (profileError || !profile) {
+  if (profileError || !profileRaw) {
     redirect("/login");
   }
 
-  const role = normalizeUserRole(profile.role);
+  const role = normalizeUserRole(profileRaw.role);
+
+  const profile: UserContextProfile = {
+    ...profileRaw,
+    role,
+  };
 
   const { data: tenantMemberRaw, error: tenantMemberError } = await supabase
     .from("tenant_members")
@@ -92,16 +97,19 @@ export async function requireUserContext(): Promise<UserContext> {
 
   const tenantId = tenantMember?.tenant_id ?? null;
 
-  const tenant = tenantId
+  const { data: tenant, error: tenantError } = tenantId
     ? await supabase
         .from("tenants")
         .select("*")
         .eq("id", tenantId)
         .maybeSingle()
-    : null;
+    : {
+        data: null,
+        error: null,
+      };
 
-  if (tenant?.error) {
-    throw new Error(tenant.error.message);
+  if (tenantError) {
+    throw new Error(tenantError.message);
   }
 
   return {
@@ -109,12 +117,9 @@ export async function requireUserContext(): Promise<UserContext> {
       id: user.id,
       email: user.email ?? null,
     },
-    profile: {
-      ...profile,
-      role,
-    },
+    profile,
     role,
-    tenant: tenant?.data ?? null,
+    tenant,
     tenantMember,
   };
 }
