@@ -11,7 +11,8 @@ import type { Database, Json } from "@/src/types/supabase";
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
 type CaseRow = Database["public"]["Tables"]["cases"]["Row"];
 type MessageRow = Database["public"]["Tables"]["messages"]["Row"];
-type CaseDocumentRow = Database["public"]["Tables"]["case_documents"]["Row"];
+type CaseDocumentRow =
+  Database["public"]["Tables"]["case_documents"]["Row"];
 
 type CasePriority = "low" | "medium" | "high" | "urgent";
 
@@ -27,9 +28,19 @@ type LoggedClientResult = {
   client: ClientRow | null;
 };
 
+export type ClientDashboardMessage = MessageRow & {
+  case_title: string;
+};
+
+export type ClientDashboardDocument = CaseDocumentRow & {
+  case_title: string;
+};
+
 export type ClientDashboardData = {
   client: ClientRow | null;
   cases: CaseRow[];
+  latestLawyerMessage: ClientDashboardMessage | null;
+  latestDocument: ClientDashboardDocument | null;
 };
 
 export type AuthenticatedClientDocument = CaseDocumentRow & {
@@ -101,13 +112,48 @@ function getValidFiles(files: File[]): File[] {
     .slice(0, maxFiles);
 }
 
+function buildGuidedCaseDescription(params: {
+  serviceTitle: string;
+  serviceCategory: string;
+  situation: string;
+  objective: string;
+  importantDates: string;
+  involvedParties: string;
+  availableDocuments: string;
+}): string {
+  return [
+    params.serviceTitle
+      ? `TIPO DE ATENDIMENTO\n${params.serviceTitle}`
+      : "",
+    params.serviceCategory
+      ? `CATEGORIA\n${params.serviceCategory}`
+      : "",
+    params.situation
+      ? `O QUE ACONTECEU\n${params.situation}`
+      : "",
+    params.objective
+      ? `O QUE O CLIENTE PRECISA\n${params.objective}`
+      : "",
+    params.importantDates
+      ? `DATAS E PRAZOS IMPORTANTES\n${params.importantDates}`
+      : "",
+    params.involvedParties
+      ? `PESSOAS OU EMPRESAS ENVOLVIDAS\n${params.involvedParties}`
+      : "",
+    params.availableDocuments
+      ? `DOCUMENTOS DISPONÍVEIS\n${params.availableDocuments}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 async function uploadDocumentsToStorage(params: {
   tenantId: string;
   caseId: string;
   files: File[];
 }): Promise<UploadedDocumentPayload[]> {
   const admin = createSupabaseAdminClient();
-
   const uploadedDocuments: UploadedDocumentPayload[] = [];
 
   for (const file of params.files) {
@@ -223,25 +269,90 @@ export async function getClientDashboardData(): Promise<ClientDashboardData> {
     return {
       client: null,
       cases: [],
+      latestLawyerMessage: null,
+      latestDocument: null,
     };
   }
 
   const admin = createSupabaseAdminClient();
 
-  const { data: cases, error } = await admin
+  const { data: cases, error: casesError } = await admin
     .from("cases")
     .select("*")
     .eq("tenant_id", client.tenant_id)
     .eq("client_id", client.id)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    throw new Error(error.message);
+  if (casesError) {
+    throw new Error(casesError.message);
   }
+
+  const clientCases = cases ?? [];
+  const caseIds = clientCases.map((legalCase) => legalCase.id);
+  const casesById = new Map(
+    clientCases.map((legalCase) => [legalCase.id, legalCase]),
+  );
+
+  if (caseIds.length === 0) {
+    return {
+      client,
+      cases: clientCases,
+      latestLawyerMessage: null,
+      latestDocument: null,
+    };
+  }
+
+  const { data: latestLawyerMessageRaw, error: messageError } = await admin
+    .from("messages")
+    .select("*")
+    .eq("tenant_id", client.tenant_id)
+    .eq("sender_type", "lawyer")
+    .in("case_id", caseIds)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (messageError) {
+    throw new Error(messageError.message);
+  }
+
+  const { data: latestDocumentRaw, error: documentError } = await admin
+    .from("case_documents")
+    .select("*")
+    .eq("tenant_id", client.tenant_id)
+    .in("case_id", caseIds)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (documentError) {
+    throw new Error(documentError.message);
+  }
+
+  const latestLawyerMessage: ClientDashboardMessage | null =
+    latestLawyerMessageRaw
+      ? {
+          ...latestLawyerMessageRaw,
+          case_title:
+            casesById.get(latestLawyerMessageRaw.case_id)?.title ??
+            "Atendimento",
+        }
+      : null;
+
+  const latestDocument: ClientDashboardDocument | null = latestDocumentRaw
+    ? {
+        ...latestDocumentRaw,
+        case_title:
+          casesById.get(latestDocumentRaw.case_id)?.title ??
+          "Atendimento",
+      }
+    : null;
 
   return {
     client,
-    cases: cases ?? [],
+    cases: clientCases,
+    latestLawyerMessage,
+    latestDocument,
   };
 }
 
@@ -290,25 +401,26 @@ export async function getClientCaseDetailData(
     throw new Error(documentsError.message);
   }
 
-  const documentsWithUrls: AuthenticatedClientDocument[] = await Promise.all(
-    (documents ?? []).map(async (document) => {
-      if (!document.storage_path) {
+  const documentsWithUrls: AuthenticatedClientDocument[] =
+    await Promise.all(
+      (documents ?? []).map(async (document) => {
+        if (!document.storage_path) {
+          return {
+            ...document,
+            url: null,
+          };
+        }
+
+        const { data, error } = await admin.storage
+          .from("case-documents")
+          .createSignedUrl(document.storage_path, 60 * 60);
+
         return {
           ...document,
-          url: null,
+          url: error ? null : data?.signedUrl ?? null,
         };
-      }
-
-      const { data, error } = await admin.storage
-        .from("case-documents")
-        .createSignedUrl(document.storage_path, 60 * 60);
-
-      return {
-        ...document,
-        url: error ? null : data?.signedUrl ?? null,
-      };
-    }),
-  );
+      }),
+    );
 
   return {
     client,
@@ -322,14 +434,78 @@ export async function createAuthenticatedClientCaseAction(
   formData: FormData,
 ): Promise<void> {
   const title = getStringField(formData, "title");
-  const description = getStringField(formData, "description");
-  const priority = getValidPriority(getStringField(formData, "priority"));
+  const priority = getValidPriority(
+    getStringField(formData, "priority"),
+  );
+  const files = getValidFiles(getFilesFromFormData(formData));
+
+  const serviceId = getStringField(formData, "serviceId");
+  const serviceTitle = getStringField(formData, "serviceTitle");
+  const serviceCategory = getStringField(
+    formData,
+    "serviceCategory",
+  );
+
+  const situation = getStringField(formData, "situation");
+  const objective = getStringField(formData, "objective");
+  const importantDates = getStringField(
+    formData,
+    "importantDates",
+  );
+  const involvedParties = getStringField(
+    formData,
+    "involvedParties",
+  );
+  const availableDocuments = getStringField(
+    formData,
+    "availableDocuments",
+  );
+
+  const legacyDescription = getStringField(
+    formData,
+    "description",
+  );
+
+  const guidedDescription = buildGuidedCaseDescription({
+    serviceTitle,
+    serviceCategory,
+    situation,
+    objective,
+    importantDates,
+    involvedParties,
+    availableDocuments,
+  });
+
+  const description = guidedDescription || legacyDescription;
+
+  const isGuidedForm =
+    Boolean(serviceId) ||
+    Boolean(serviceTitle) ||
+    Boolean(serviceCategory) ||
+    Boolean(situation) ||
+    Boolean(objective);
 
   if (!title || !description) {
+    const serviceQuery = serviceId
+      ? `&service=${encodeURIComponent(serviceId)}`
+      : "";
+
     redirect(
       `/dashboard/client/cases/new?error=${encodeURIComponent(
-        "Título e descrição são obrigatórios.",
-      )}`,
+        "Preencha o título e as informações do atendimento.",
+      )}${serviceQuery}`,
+    );
+  }
+
+  if (isGuidedForm && (!situation || !objective)) {
+    const serviceQuery = serviceId
+      ? `&service=${encodeURIComponent(serviceId)}`
+      : "";
+
+    redirect(
+      `/dashboard/client/cases/new?error=${encodeURIComponent(
+        "Preencha o que aconteceu e o que você precisa do escritório.",
+      )}${serviceQuery}`,
     );
   }
 
@@ -358,19 +534,43 @@ export async function createAuthenticatedClientCaseAction(
     .single();
 
   if (createCaseError || !createdCase) {
+    const serviceQuery = serviceId
+      ? `&service=${encodeURIComponent(serviceId)}`
+      : "";
+
     redirect(
       `/dashboard/client/cases/new?error=${encodeURIComponent(
-        createCaseError?.message ?? "Erro ao criar atendimento.",
-      )}`,
+        createCaseError?.message ??
+          "Erro ao criar atendimento.",
+      )}${serviceQuery}`,
     );
   }
 
-  const { error: messageError } = await admin.from("messages").insert({
-    tenant_id: createdCase.tenant_id,
-    case_id: createdCase.id,
-    sender_type: "client",
-    content: description,
-  });
+  const initialMessageContent =
+    situation && objective
+      ? [
+          serviceTitle
+            ? `Atendimento: ${serviceTitle}`
+            : "",
+          situation
+            ? `O que aconteceu:\n${situation}`
+            : "",
+          objective
+            ? `O que preciso:\n${objective}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n")
+      : description;
+
+  const { error: messageError } = await admin
+    .from("messages")
+    .insert({
+      tenant_id: createdCase.tenant_id,
+      case_id: createdCase.id,
+      sender_type: "client",
+      content: initialMessageContent,
+    });
 
   if (messageError) {
     redirect(
@@ -380,12 +580,88 @@ export async function createAuthenticatedClientCaseAction(
     );
   }
 
+  if (files.length > 0) {
+    let uploadedDocuments: UploadedDocumentPayload[];
+
+    try {
+      uploadedDocuments = await uploadDocumentsToStorage({
+        tenantId: createdCase.tenant_id,
+        caseId: createdCase.id,
+        files,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "O atendimento foi criado, mas ocorreu um erro ao enviar os arquivos.";
+
+      redirect(
+        `/dashboard/client/cases/${createdCase.id}?error=${encodeURIComponent(
+          message,
+        )}`,
+      );
+    }
+
+    const documentsToInsert = uploadedDocuments.map(
+      (document) => ({
+        tenant_id: createdCase.tenant_id,
+        case_id: createdCase.id,
+        sender_type: "client",
+        file_name: document.fileName,
+        storage_path: document.storagePath,
+        file_size: document.fileSize,
+        file_type: document.fileType,
+      }),
+    );
+
+    const { error: documentsError } = await admin
+      .from("case_documents")
+      .insert(documentsToInsert);
+
+    if (documentsError) {
+      redirect(
+        `/dashboard/client/cases/${createdCase.id}?error=${encodeURIComponent(
+          documentsError.message,
+        )}`,
+      );
+    }
+
+    for (const document of uploadedDocuments) {
+      const documentMetadata: Json = {
+        case_title: createdCase.title,
+        sender_type: "client",
+        source: "authenticated_client_case_creation",
+        file_name: document.fileName,
+        file_size: document.fileSize,
+        file_type: document.fileType,
+        storage_path: document.storagePath,
+        service_id: serviceId || null,
+        service_title: serviceTitle || null,
+      };
+
+      await createAuditLog({
+        tenantId: createdCase.tenant_id,
+        actorId: context.user.id,
+        action: "document_uploaded",
+        entityType: "case",
+        entityId: createdCase.id,
+        description: `Documento "${document.fileName}" enviado pelo cliente durante a criação do caso "${createdCase.title}".`,
+        metadata: documentMetadata,
+      });
+    }
+  }
+
   const caseMetadata: Json = {
     case_title: createdCase.title,
     client_id: client.id,
     client_name: client.name,
     priority: createdCase.priority,
     source: "authenticated_client_dashboard",
+    service_id: serviceId || null,
+    service_title: serviceTitle || null,
+    service_category: serviceCategory || null,
+    guided_form: isGuidedForm,
+    uploaded_documents_count: files.length,
   };
 
   await createAuditLog({
@@ -402,7 +678,9 @@ export async function createAuthenticatedClientCaseAction(
     case_title: createdCase.title,
     sender_type: "client",
     source: "authenticated_client_dashboard",
-    content_preview: description.slice(0, 160),
+    content_preview: initialMessageContent.slice(0, 160),
+    service_id: serviceId || null,
+    service_title: serviceTitle || null,
   };
 
   await createAuditLog({
@@ -416,15 +694,20 @@ export async function createAuthenticatedClientCaseAction(
   });
 
   revalidatePath("/dashboard/client");
+  revalidatePath("/dashboard/client/cases");
   revalidatePath("/dashboard/cases");
-  revalidatePath(`/dashboard/client/cases/${createdCase.id}`);
+  revalidatePath(
+    `/dashboard/client/cases/${createdCase.id}`,
+  );
   revalidatePath(`/dashboard/cases/${createdCase.id}`);
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/activity");
   revalidatePath("/dashboard/notifications");
   revalidatePath("/dashboard/audit");
 
-  redirect(`/dashboard/client/cases/${createdCase.id}?success=case-created`);
+  redirect(
+    `/dashboard/client/cases/${createdCase.id}?success=case-created`,
+  );
 }
 
 export async function sendAuthenticatedClientMessageAction(
@@ -489,6 +772,8 @@ export async function sendAuthenticatedClientMessageAction(
     metadata,
   });
 
+  revalidatePath("/dashboard/client");
+  revalidatePath("/dashboard/client/cases");
   revalidatePath(`/dashboard/client/cases/${caseId}`);
   revalidatePath(`/dashboard/cases/${caseId}`);
   revalidatePath("/dashboard");
@@ -496,7 +781,9 @@ export async function sendAuthenticatedClientMessageAction(
   revalidatePath("/dashboard/notifications");
   revalidatePath("/dashboard/audit");
 
-  redirect(`/dashboard/client/cases/${caseId}?success=message-sent`);
+  redirect(
+    `/dashboard/client/cases/${caseId}?success=message-sent`,
+  );
 }
 
 export async function uploadAuthenticatedClientDocumentAction(
@@ -547,22 +834,28 @@ export async function uploadAuthenticatedClientDocumentAction(
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Erro ao enviar documentos.";
+      error instanceof Error
+        ? error.message
+        : "Erro ao enviar documentos.";
 
     redirect(
-      `/dashboard/client/cases/${caseId}?error=${encodeURIComponent(message)}`,
+      `/dashboard/client/cases/${caseId}?error=${encodeURIComponent(
+        message,
+      )}`,
     );
   }
 
-  const documentsToInsert = uploadedDocuments.map((uploadedDocument) => ({
-    tenant_id: legalCase.tenant_id,
-    case_id: legalCase.id,
-    sender_type: "client",
-    file_name: uploadedDocument.fileName,
-    storage_path: uploadedDocument.storagePath,
-    file_size: uploadedDocument.fileSize,
-    file_type: uploadedDocument.fileType,
-  }));
+  const documentsToInsert = uploadedDocuments.map(
+    (uploadedDocument) => ({
+      tenant_id: legalCase.tenant_id,
+      case_id: legalCase.id,
+      sender_type: "client",
+      file_name: uploadedDocument.fileName,
+      storage_path: uploadedDocument.storagePath,
+      file_size: uploadedDocument.fileSize,
+      file_type: uploadedDocument.fileType,
+    }),
+  );
 
   const { error: insertError } = await admin
     .from("case_documents")
@@ -598,6 +891,8 @@ export async function uploadAuthenticatedClientDocumentAction(
     });
   }
 
+  revalidatePath("/dashboard/client");
+  revalidatePath("/dashboard/client/cases");
   revalidatePath(`/dashboard/client/cases/${caseId}`);
   revalidatePath(`/dashboard/cases/${caseId}`);
   revalidatePath("/dashboard");
@@ -605,5 +900,7 @@ export async function uploadAuthenticatedClientDocumentAction(
   revalidatePath("/dashboard/notifications");
   revalidatePath("/dashboard/audit");
 
-  redirect(`/dashboard/client/cases/${caseId}?success=document-uploaded`);
+  redirect(
+    `/dashboard/client/cases/${caseId}?success=document-uploaded`,
+  );
 }

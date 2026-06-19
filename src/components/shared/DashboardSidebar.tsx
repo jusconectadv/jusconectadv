@@ -32,7 +32,7 @@ const navigationGroups: readonly NavigationGroup[] = [
       {
         href: "/dashboard/client",
         label: "Área do cliente",
-        description: "Seus atendimentos",
+        description: "Seu espaço principal",
         roles: ["client"],
         exact: true,
       },
@@ -77,6 +77,21 @@ const navigationGroups: readonly NavigationGroup[] = [
         label: "Tarefas",
         description: "Prazos e atividades",
         roles: ["lawyer"],
+      },
+
+      // PORTAL DO CLIENTE
+      {
+        href: "/dashboard/client/services",
+        label: "Serviços",
+        description: "Como podemos ajudar?",
+        roles: ["client"],
+        exact: true,
+      },
+      {
+        href: "/dashboard/client/cases",
+        label: "Acompanhe",
+        description: "Seus atendimentos",
+        roles: ["client"],
       },
       {
         href: "/dashboard/client/meetings",
@@ -252,15 +267,24 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
           </p>
 
           <p className="mt-2 text-xs leading-5 text-[#B8C2CC]">
-            Solicite uma reunião vinculada a um dos seus atendimentos.
+            Abra um atendimento ou solicite uma reunião com a equipe.
           </p>
 
-          <Link
-            href="/dashboard/client/meetings"
-            className="mt-4 inline-flex rounded-xl bg-[#C89B4A] px-4 py-2 text-xs font-bold text-[#0B1D2D] transition hover:bg-[#D9AE5F]"
-          >
-            Minhas reuniões
-          </Link>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              href="/dashboard/client/services"
+              className="inline-flex rounded-xl bg-[#C89B4A] px-4 py-2 text-xs font-bold text-[#0B1D2D] transition hover:bg-[#D9AE5F]"
+            >
+              Ver serviços
+            </Link>
+
+            <Link
+              href="/dashboard/client/meetings"
+              className="inline-flex rounded-xl border border-[#C89B4A]/40 bg-[#0B1D2D] px-4 py-2 text-xs font-bold text-white transition hover:border-[#C89B4A]"
+            >
+              Reuniões
+            </Link>
+          </div>
         </div>
       ) : null}
     </aside>
