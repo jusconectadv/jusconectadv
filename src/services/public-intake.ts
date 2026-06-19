@@ -3,9 +3,14 @@
 import { redirect } from "next/navigation";
 
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+import type { Database } from "@/src/types/supabase";
+
+type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
 
 type ClientType = "PF" | "PJ";
 type CasePriority = "low" | "medium" | "high" | "urgent";
+type AccountMode = "create" | "login";
 
 type UploadedDocumentPayload = {
   fileName: string;
@@ -20,28 +25,29 @@ function getStringField(formData: FormData, field: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function parseClientType(value: string): ClientType {
-  if (value === "PJ") {
-    return "PJ";
-  }
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
 
-  return "PF";
+function parseClientType(value: string): ClientType {
+  return value === "PJ" ? "PJ" : "PF";
 }
 
 function parsePriority(value: string): CasePriority {
-  if (value === "urgent") {
-    return "urgent";
-  }
-
-  if (value === "high") {
-    return "high";
-  }
-
-  if (value === "low") {
-    return "low";
+  if (
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "urgent"
+  ) {
+    return value;
   }
 
   return "medium";
+}
+
+function parseAccountMode(value: string): AccountMode {
+  return value === "login" ? "login" : "create";
 }
 
 function getSafeFileExtension(fileName: string): string {
@@ -83,13 +89,25 @@ function getValidFiles(files: File[]): File[] {
     .slice(0, maxFiles);
 }
 
+function buildPublicFormUrl(params: {
+  tenantId: string;
+  error?: string;
+}): string {
+  const baseUrl = `/advogado/${params.tenantId}`;
+
+  if (!params.error) {
+    return baseUrl;
+  }
+
+  return `${baseUrl}?error=${encodeURIComponent(params.error)}`;
+}
+
 async function uploadPublicCaseDocuments(params: {
   tenantId: string;
   caseId: string;
   files: File[];
 }): Promise<UploadedDocumentPayload[]> {
-  const supabase = createSupabaseAdminClient();
-
+  const admin = createSupabaseAdminClient();
   const uploadedDocuments: UploadedDocumentPayload[] = [];
 
   for (const file of params.files) {
@@ -100,7 +118,7 @@ async function uploadPublicCaseDocuments(params: {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await admin.storage
       .from("case-documents")
       .upload(storagePath, buffer, {
         contentType: file.type || "application/octet-stream",
@@ -127,27 +145,82 @@ export async function createPublicCaseAction(
 ): Promise<void> {
   const tenantId = getStringField(formData, "tenantId");
   const name = getStringField(formData, "name");
-  const email = getStringField(formData, "email");
+  const rawEmail = getStringField(formData, "email");
+  const email = normalizeEmail(rawEmail);
   const phone = getStringField(formData, "phone");
   const document = getStringField(formData, "document");
-  const clientType = parseClientType(getStringField(formData, "clientType"));
+
+  const clientType = parseClientType(
+    getStringField(formData, "clientType"),
+  );
+
   const title = getStringField(formData, "title");
   const description = getStringField(formData, "description");
-  const priority = parsePriority(getStringField(formData, "priority"));
+
+  const priority = parsePriority(
+    getStringField(formData, "priority"),
+  );
+
+  const accountMode = parseAccountMode(
+    getStringField(formData, "accountMode"),
+  );
+
+  const password = getStringField(formData, "password");
+  const confirmPassword = getStringField(
+    formData,
+    "confirmPassword",
+  );
 
   if (!tenantId) {
     redirect("/login");
   }
 
-  if (!name || !title || !description) {
-    redirect(`/advogado/${tenantId}?error=Preencha os campos obrigatórios.`);
+  if (!name || !email || !title || !description) {
+    redirect(
+      buildPublicFormUrl({
+        tenantId,
+        error:
+          "Preencha nome, e-mail e as informações obrigatórias do atendimento.",
+      }),
+    );
   }
 
-  const files = getValidFiles(getFilesFromFormData(formData));
+  if (!password) {
+    redirect(
+      buildPublicFormUrl({
+        tenantId,
+        error: "Informe sua senha de acesso.",
+      }),
+    );
+  }
 
-  const supabase = createSupabaseAdminClient();
+  if (password.length < 6) {
+    redirect(
+      buildPublicFormUrl({
+        tenantId,
+        error: "A senha deve possuir pelo menos 6 caracteres.",
+      }),
+    );
+  }
 
-  const { data: tenant, error: tenantError } = await supabase
+  if (accountMode === "create" && password !== confirmPassword) {
+    redirect(
+      buildPublicFormUrl({
+        tenantId,
+        error:
+          "A confirmação da senha não corresponde à senha informada.",
+      }),
+    );
+  }
+
+  const files = getValidFiles(
+    getFilesFromFormData(formData),
+  );
+
+  const admin = createSupabaseAdminClient();
+  const authClient = await createSupabaseServerClient();
+
+  const { data: tenant, error: tenantError } = await admin
     .from("tenants")
     .select("id, active")
     .eq("id", tenantId)
@@ -155,10 +228,18 @@ export async function createPublicCaseAction(
     .single();
 
   if (tenantError || !tenant) {
-    redirect(`/advogado/${tenantId}?error=Escritório não encontrado.`);
+    redirect(
+      buildPublicFormUrl({
+        tenantId,
+        error: "Escritório não encontrado ou indisponível.",
+      }),
+    );
   }
 
-  const { data: publicSettings, error: publicSettingsError } = await supabase
+  const {
+    data: publicSettings,
+    error: publicSettingsError,
+  } = await admin
     .from("tenant_public_settings")
     .select("is_public_active")
     .eq("tenant_id", tenant.id)
@@ -166,42 +247,306 @@ export async function createPublicCaseAction(
 
   if (publicSettingsError) {
     redirect(
-      `/advogado/${tenantId}?error=${encodeURIComponent(
-        publicSettingsError.message,
-      )}`,
+      buildPublicFormUrl({
+        tenantId,
+        error: publicSettingsError.message,
+      }),
     );
   }
 
   if (publicSettings && !publicSettings.is_public_active) {
-    redirect(`/advogado/${tenantId}?error=Atendimento público indisponível.`);
+    redirect(
+      buildPublicFormUrl({
+        tenantId,
+        error: "Atendimento público indisponível.",
+      }),
+    );
   }
 
-  const { data: client, error: clientError } = await supabase
-    .from("clients")
-    .insert({
-      tenant_id: tenant.id,
-      user_id: null,
-      auth_user_id: null,
-      type: clientType,
-      name,
-      document: document || null,
-      email: email || null,
-      phone: phone || null,
-    })
-    .select("*")
-    .single();
+  let userId: string;
 
-  if (clientError || !client) {
-    redirect(
-      `/advogado/${tenantId}?error=${encodeURIComponent(
-        clientError?.message ?? "Erro ao criar cliente.",
-      )}`,
+  if (accountMode === "login") {
+    const { data: loginData, error: loginError } =
+      await authClient.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+    if (loginError || !loginData.user) {
+      const loginMessage =
+        loginError?.message === "Invalid login credentials"
+          ? "E-mail ou senha inválidos."
+          : loginError?.message ??
+            "Não foi possível entrar na conta.";
+
+      redirect(
+        buildPublicFormUrl({
+          tenantId,
+          error: loginMessage,
+        }),
+      );
+    }
+
+    userId = loginData.user.id;
+  } else {
+    const { data: signUpData, error: signUpError } =
+      await authClient.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name,
+          },
+        },
+      });
+
+    if (signUpError) {
+      const normalizedMessage =
+        signUpError.message.toLowerCase();
+
+      const isExistingAccount =
+        normalizedMessage.includes("already") ||
+        normalizedMessage.includes("registered") ||
+        normalizedMessage.includes("exists");
+
+      redirect(
+        buildPublicFormUrl({
+          tenantId,
+          error: isExistingAccount
+            ? "Este e-mail já possui uma conta. Selecione “Já tenho uma conta” e informe sua senha."
+            : signUpError.message,
+        }),
+      );
+    }
+
+    if (!signUpData.user) {
+      redirect(
+        buildPublicFormUrl({
+          tenantId,
+          error: "Não foi possível criar sua conta.",
+        }),
+      );
+    }
+
+    userId = signUpData.user.id;
+  }
+
+  const { error: profileError } = await admin
+    .from("profiles")
+    .upsert(
+      {
+        id: userId,
+        full_name: name,
+        role: "client",
+      },
+      {
+        onConflict: "id",
+      },
     );
+
+  if (profileError) {
+    redirect(
+      buildPublicFormUrl({
+        tenantId,
+        error: profileError.message,
+      }),
+    );
+  }
+
+  const {
+    data: clientsByAuthId,
+    error: clientsByAuthIdError,
+  } = await admin
+    .from("clients")
+    .select("*")
+    .eq("tenant_id", tenant.id)
+    .eq("auth_user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  if (clientsByAuthIdError) {
+    redirect(
+      buildPublicFormUrl({
+        tenantId,
+        error: clientsByAuthIdError.message,
+      }),
+    );
+  }
+
+  let client: ClientRow | null =
+    clientsByAuthId?.[0] ?? null;
+
+  if (!client) {
+    const {
+      data: clientsByEmail,
+      error: clientsByEmailError,
+    } = await admin
+      .from("clients")
+      .select("*")
+      .eq("tenant_id", tenant.id)
+      .ilike("email", email)
+      .order("created_at", { ascending: true });
+
+    if (clientsByEmailError) {
+      redirect(
+        buildPublicFormUrl({
+          tenantId,
+          error: clientsByEmailError.message,
+        }),
+      );
+    }
+
+    const availableClient =
+      clientsByEmail?.find(
+        (existingClient) =>
+          !existingClient.auth_user_id ||
+          existingClient.auth_user_id === userId,
+      ) ?? null;
+
+    const clientLinkedToAnotherUser =
+      (clientsByEmail?.length ?? 0) > 0 &&
+      !availableClient;
+
+    if (clientLinkedToAnotherUser) {
+      redirect(
+        buildPublicFormUrl({
+          tenantId,
+          error:
+            "Já existe um cadastro neste escritório com este e-mail vinculado a outra conta.",
+        }),
+      );
+    }
+
+    client = availableClient;
+  }
+
+  if (client) {
+    const {
+      data: updatedClient,
+      error: updateClientError,
+    } = await admin
+      .from("clients")
+      .update({
+        user_id: userId,
+        auth_user_id: userId,
+        type: clientType,
+        name,
+        document: document || null,
+        email,
+        phone: phone || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", client.id)
+      .eq("tenant_id", tenant.id)
+      .select("*")
+      .single();
+
+    if (updateClientError || !updatedClient) {
+      redirect(
+        buildPublicFormUrl({
+          tenantId,
+          error:
+            updateClientError?.message ??
+            "Não foi possível vincular seu cadastro.",
+        }),
+      );
+    }
+
+    client = updatedClient;
+  } else {
+    const {
+      data: createdClient,
+      error: createClientError,
+    } = await admin
+      .from("clients")
+      .insert({
+        tenant_id: tenant.id,
+        user_id: userId,
+        auth_user_id: userId,
+        type: clientType,
+        name,
+        document: document || null,
+        email,
+        phone: phone || null,
+      })
+      .select("*")
+      .single();
+
+    if (createClientError || !createdClient) {
+      redirect(
+        buildPublicFormUrl({
+          tenantId,
+          error:
+            createClientError?.message ??
+            "Não foi possível criar o cliente.",
+        }),
+      );
+    }
+
+    client = createdClient;
+  }
+
+  const {
+    data: existingMembers,
+    error: existingMemberError,
+  } = await admin
+    .from("tenant_members")
+    .select("id")
+    .eq("tenant_id", tenant.id)
+    .eq("user_id", userId)
+    .limit(1);
+
+  if (existingMemberError) {
+    redirect(
+      buildPublicFormUrl({
+        tenantId,
+        error: existingMemberError.message,
+      }),
+    );
+  }
+
+  const existingMember = existingMembers?.[0] ?? null;
+
+  if (existingMember) {
+    const { error: updateMemberError } = await admin
+      .from("tenant_members")
+      .update({
+        role: "client",
+        is_active: true,
+      })
+      .eq("id", existingMember.id);
+
+    if (updateMemberError) {
+      redirect(
+        buildPublicFormUrl({
+          tenantId,
+          error: updateMemberError.message,
+        }),
+      );
+    }
+  } else {
+    const { error: createMemberError } = await admin
+      .from("tenant_members")
+      .insert({
+        tenant_id: tenant.id,
+        user_id: userId,
+        role: "client",
+        is_active: true,
+      });
+
+    if (createMemberError) {
+      redirect(
+        buildPublicFormUrl({
+          tenantId,
+          error: createMemberError.message,
+        }),
+      );
+    }
   }
 
   const publicToken = crypto.randomUUID();
 
-  const { data: legalCase, error: caseError } = await supabase
+  const { data: legalCase, error: caseError } = await admin
     .from("cases")
     .insert({
       tenant_id: tenant.id,
@@ -218,18 +563,23 @@ export async function createPublicCaseAction(
 
   if (caseError || !legalCase) {
     redirect(
-      `/advogado/${tenantId}?error=${encodeURIComponent(
-        caseError?.message ?? "Erro ao criar caso.",
-      )}`,
+      buildPublicFormUrl({
+        tenantId,
+        error:
+          caseError?.message ??
+          "Erro ao criar atendimento.",
+      }),
     );
   }
 
-  const { error: messageError } = await supabase.from("messages").insert({
-    tenant_id: tenant.id,
-    case_id: legalCase.id,
-    sender_type: "client",
-    content: description,
-  });
+  const { error: messageError } = await admin
+    .from("messages")
+    .insert({
+      tenant_id: tenant.id,
+      case_id: legalCase.id,
+      sender_type: "client",
+      content: description,
+    });
 
   if (messageError) {
     redirect(
@@ -241,23 +591,26 @@ export async function createPublicCaseAction(
 
   if (files.length > 0) {
     try {
-      const uploadedDocuments = await uploadPublicCaseDocuments({
-        tenantId: tenant.id,
-        caseId: legalCase.id,
-        files,
-      });
+      const uploadedDocuments =
+        await uploadPublicCaseDocuments({
+          tenantId: tenant.id,
+          caseId: legalCase.id,
+          files,
+        });
 
-      const documentsToInsert = uploadedDocuments.map((uploadedDocument) => ({
-        tenant_id: tenant.id,
-        case_id: legalCase.id,
-        sender_type: "client",
-        file_name: uploadedDocument.fileName,
-        storage_path: uploadedDocument.storagePath,
-        file_size: uploadedDocument.fileSize,
-        file_type: uploadedDocument.fileType,
-      }));
+      const documentsToInsert = uploadedDocuments.map(
+        (uploadedDocument) => ({
+          tenant_id: tenant.id,
+          case_id: legalCase.id,
+          sender_type: "client",
+          file_name: uploadedDocument.fileName,
+          storage_path: uploadedDocument.storagePath,
+          file_size: uploadedDocument.fileSize,
+          file_type: uploadedDocument.fileType,
+        }),
+      );
 
-      const { error: documentsError } = await supabase
+      const { error: documentsError } = await admin
         .from("case_documents")
         .insert(documentsToInsert);
 
@@ -270,13 +623,17 @@ export async function createPublicCaseAction(
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Erro ao enviar documentos.";
+        error instanceof Error
+          ? error.message
+          : "Erro ao enviar documentos.";
 
       redirect(
-        `/acompanhar/${publicToken}?error=${encodeURIComponent(message)}`,
+        `/acompanhar/${publicToken}?error=${encodeURIComponent(
+          message,
+        )}`,
       );
     }
   }
 
-  redirect(`/acompanhar/${publicToken}/sucesso`);
+  redirect(`/advogado/${tenant.id}/sucesso`);
 }

@@ -76,12 +76,24 @@ export async function requireUserContext(): Promise<UserContext> {
     role,
   };
 
+  /*
+   * Advogado/staff:
+   * prioriza o vínculo mais antigo, normalmente o escritório principal.
+   *
+   * Cliente:
+   * prioriza o vínculo mais recente, permitindo entrar pelo link de outro
+   * escritório e acessar primeiro o vínculo recém-criado.
+   */
+  const memberOrderAscending = role !== "client";
+
   const { data: tenantMemberRaw, error: tenantMemberError } = await supabase
     .from("tenant_members")
     .select("*")
     .eq("user_id", user.id)
     .eq("is_active", true)
-    .order("created_at", { ascending: true })
+    .order("created_at", {
+      ascending: memberOrderAscending,
+    })
     .limit(1)
     .maybeSingle();
 
@@ -103,6 +115,7 @@ export async function requireUserContext(): Promise<UserContext> {
         .from("tenants")
         .select("*")
         .eq("id", tenantId)
+        .eq("active", true)
         .maybeSingle()
     : null;
 

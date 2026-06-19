@@ -11,8 +11,7 @@ import type { Database, Json } from "@/src/types/supabase";
 type ClientRow = Database["public"]["Tables"]["clients"]["Row"];
 type CaseRow = Database["public"]["Tables"]["cases"]["Row"];
 type MessageRow = Database["public"]["Tables"]["messages"]["Row"];
-type CaseDocumentRow =
-  Database["public"]["Tables"]["case_documents"]["Row"];
+type CaseDocumentRow = Database["public"]["Tables"]["case_documents"]["Row"];
 
 type CasePriority = "low" | "medium" | "high" | "urgent";
 
@@ -122,18 +121,10 @@ function buildGuidedCaseDescription(params: {
   availableDocuments: string;
 }): string {
   return [
-    params.serviceTitle
-      ? `TIPO DE ATENDIMENTO\n${params.serviceTitle}`
-      : "",
-    params.serviceCategory
-      ? `CATEGORIA\n${params.serviceCategory}`
-      : "",
-    params.situation
-      ? `O QUE ACONTECEU\n${params.situation}`
-      : "",
-    params.objective
-      ? `O QUE O CLIENTE PRECISA\n${params.objective}`
-      : "",
+    params.serviceTitle ? `TIPO DE ATENDIMENTO\n${params.serviceTitle}` : "",
+    params.serviceCategory ? `CATEGORIA\n${params.serviceCategory}` : "",
+    params.situation ? `O QUE ACONTECEU\n${params.situation}` : "",
+    params.objective ? `O QUE O CLIENTE PRECISA\n${params.objective}` : "",
     params.importantDates
       ? `DATAS E PRAZOS IMPORTANTES\n${params.importantDates}`
       : "",
@@ -195,15 +186,25 @@ async function getLoggedClient(): Promise<LoggedClientResult> {
 
   const admin = createSupabaseAdminClient();
 
-  const { data: clientByAuthId, error: authClientError } = await admin
+  /*
+   * Um usuário pode possuir um cadastro de cliente em vários escritórios.
+   *
+   * Por isso não usamos mais maybeSingle() diretamente sobre auth_user_id.
+   * Buscamos todos de forma ordenada e selecionamos o vínculo mais recente.
+   */
+  const { data: clientsByAuthId, error: authClientError } = await admin
     .from("clients")
     .select("*")
     .eq("auth_user_id", context.user.id)
-    .maybeSingle();
+    .order("updated_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
 
   if (authClientError) {
     throw new Error(authClientError.message);
   }
+
+  const clientByAuthId = clientsByAuthId?.[0] ?? null;
 
   if (clientByAuthId) {
     return {
@@ -212,7 +213,7 @@ async function getLoggedClient(): Promise<LoggedClientResult> {
     };
   }
 
-  const email = context.user.email;
+  const email = context.user.email?.trim().toLowerCase() ?? null;
 
   if (!email) {
     return {
@@ -221,15 +222,28 @@ async function getLoggedClient(): Promise<LoggedClientResult> {
     };
   }
 
-  const { data: clientByEmail, error: emailClientError } = await admin
+  /*
+   * Compatibilidade com clientes antigos:
+   *
+   * Caso exista um cadastro criado antes da conta, procura pelo e-mail.
+   * Como o mesmo e-mail pode existir em vários escritórios, não usamos
+   * maybeSingle(). Selecionamos somente o cadastro mais recente que ainda
+   * não esteja ligado a outro usuário.
+   */
+  const { data: clientsByEmail, error: emailClientError } = await admin
     .from("clients")
     .select("*")
     .ilike("email", email)
-    .maybeSingle();
+    .is("auth_user_id", null)
+    .order("updated_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
 
   if (emailClientError) {
     throw new Error(emailClientError.message);
   }
+
+  const clientByEmail = clientsByEmail?.[0] ?? null;
 
   if (!clientByEmail) {
     return {
@@ -240,25 +254,71 @@ async function getLoggedClient(): Promise<LoggedClientResult> {
 
   const updatedAt = new Date().toISOString();
 
-  const { error: updateError } = await admin
+  const { data: linkedClient, error: updateError } = await admin
     .from("clients")
     .update({
+      user_id: context.user.id,
       auth_user_id: context.user.id,
       updated_at: updatedAt,
     })
-    .eq("id", clientByEmail.id);
+    .eq("id", clientByEmail.id)
+    .eq("tenant_id", clientByEmail.tenant_id)
+    .is("auth_user_id", null)
+    .select("*")
+    .single();
 
-  if (updateError) {
-    throw new Error(updateError.message);
+  if (updateError || !linkedClient) {
+    throw new Error(
+      updateError?.message ?? "Não foi possível vincular o cliente.",
+    );
+  }
+
+  /*
+   * Garante também o vínculo do cliente com o escritório.
+   */
+  const { data: existingMembers, error: memberSearchError } = await admin
+    .from("tenant_members")
+    .select("id")
+    .eq("tenant_id", linkedClient.tenant_id)
+    .eq("user_id", context.user.id)
+    .limit(1);
+
+  if (memberSearchError) {
+    throw new Error(memberSearchError.message);
+  }
+
+  const existingMember = existingMembers?.[0] ?? null;
+
+  if (existingMember) {
+    const { error: memberUpdateError } = await admin
+      .from("tenant_members")
+      .update({
+        role: "client",
+        is_active: true,
+      })
+      .eq("id", existingMember.id);
+
+    if (memberUpdateError) {
+      throw new Error(memberUpdateError.message);
+    }
+  } else {
+    const { error: memberInsertError } = await admin
+      .from("tenant_members")
+      .insert({
+        tenant_id: linkedClient.tenant_id,
+        user_id: context.user.id,
+        role: "client",
+        is_active: true,
+      });
+
+    if (memberInsertError) {
+      throw new Error(memberInsertError.message);
+    }
   }
 
   return {
     context,
-    client: {
-      ...clientByEmail,
-      auth_user_id: context.user.id,
-      updated_at: updatedAt,
-    },
+    client: linkedClient,
   };
 }
 
@@ -343,8 +403,7 @@ export async function getClientDashboardData(): Promise<ClientDashboardData> {
     ? {
         ...latestDocumentRaw,
         case_title:
-          casesById.get(latestDocumentRaw.case_id)?.title ??
-          "Atendimento",
+          casesById.get(latestDocumentRaw.case_id)?.title ?? "Atendimento",
       }
     : null;
 
@@ -401,26 +460,25 @@ export async function getClientCaseDetailData(
     throw new Error(documentsError.message);
   }
 
-  const documentsWithUrls: AuthenticatedClientDocument[] =
-    await Promise.all(
-      (documents ?? []).map(async (document) => {
-        if (!document.storage_path) {
-          return {
-            ...document,
-            url: null,
-          };
-        }
-
-        const { data, error } = await admin.storage
-          .from("case-documents")
-          .createSignedUrl(document.storage_path, 60 * 60);
-
+  const documentsWithUrls: AuthenticatedClientDocument[] = await Promise.all(
+    (documents ?? []).map(async (document) => {
+      if (!document.storage_path) {
         return {
           ...document,
-          url: error ? null : data?.signedUrl ?? null,
+          url: null,
         };
-      }),
-    );
+      }
+
+      const { data, error } = await admin.storage
+        .from("case-documents")
+        .createSignedUrl(document.storage_path, 60 * 60);
+
+      return {
+        ...document,
+        url: error ? null : (data?.signedUrl ?? null),
+      };
+    }),
+  );
 
   return {
     client,
@@ -434,37 +492,20 @@ export async function createAuthenticatedClientCaseAction(
   formData: FormData,
 ): Promise<void> {
   const title = getStringField(formData, "title");
-  const priority = getValidPriority(
-    getStringField(formData, "priority"),
-  );
+  const priority = getValidPriority(getStringField(formData, "priority"));
   const files = getValidFiles(getFilesFromFormData(formData));
 
   const serviceId = getStringField(formData, "serviceId");
   const serviceTitle = getStringField(formData, "serviceTitle");
-  const serviceCategory = getStringField(
-    formData,
-    "serviceCategory",
-  );
+  const serviceCategory = getStringField(formData, "serviceCategory");
 
   const situation = getStringField(formData, "situation");
   const objective = getStringField(formData, "objective");
-  const importantDates = getStringField(
-    formData,
-    "importantDates",
-  );
-  const involvedParties = getStringField(
-    formData,
-    "involvedParties",
-  );
-  const availableDocuments = getStringField(
-    formData,
-    "availableDocuments",
-  );
+  const importantDates = getStringField(formData, "importantDates");
+  const involvedParties = getStringField(formData, "involvedParties");
+  const availableDocuments = getStringField(formData, "availableDocuments");
 
-  const legacyDescription = getStringField(
-    formData,
-    "description",
-  );
+  const legacyDescription = getStringField(formData, "description");
 
   const guidedDescription = buildGuidedCaseDescription({
     serviceTitle,
@@ -540,8 +581,7 @@ export async function createAuthenticatedClientCaseAction(
 
     redirect(
       `/dashboard/client/cases/new?error=${encodeURIComponent(
-        createCaseError?.message ??
-          "Erro ao criar atendimento.",
+        createCaseError?.message ?? "Erro ao criar atendimento.",
       )}${serviceQuery}`,
     );
   }
@@ -549,28 +589,20 @@ export async function createAuthenticatedClientCaseAction(
   const initialMessageContent =
     situation && objective
       ? [
-          serviceTitle
-            ? `Atendimento: ${serviceTitle}`
-            : "",
-          situation
-            ? `O que aconteceu:\n${situation}`
-            : "",
-          objective
-            ? `O que preciso:\n${objective}`
-            : "",
+          serviceTitle ? `Atendimento: ${serviceTitle}` : "",
+          situation ? `O que aconteceu:\n${situation}` : "",
+          objective ? `O que preciso:\n${objective}` : "",
         ]
           .filter(Boolean)
           .join("\n\n")
       : description;
 
-  const { error: messageError } = await admin
-    .from("messages")
-    .insert({
-      tenant_id: createdCase.tenant_id,
-      case_id: createdCase.id,
-      sender_type: "client",
-      content: initialMessageContent,
-    });
+  const { error: messageError } = await admin.from("messages").insert({
+    tenant_id: createdCase.tenant_id,
+    case_id: createdCase.id,
+    sender_type: "client",
+    content: initialMessageContent,
+  });
 
   if (messageError) {
     redirect(
@@ -602,17 +634,15 @@ export async function createAuthenticatedClientCaseAction(
       );
     }
 
-    const documentsToInsert = uploadedDocuments.map(
-      (document) => ({
-        tenant_id: createdCase.tenant_id,
-        case_id: createdCase.id,
-        sender_type: "client",
-        file_name: document.fileName,
-        storage_path: document.storagePath,
-        file_size: document.fileSize,
-        file_type: document.fileType,
-      }),
-    );
+    const documentsToInsert = uploadedDocuments.map((document) => ({
+      tenant_id: createdCase.tenant_id,
+      case_id: createdCase.id,
+      sender_type: "client",
+      file_name: document.fileName,
+      storage_path: document.storagePath,
+      file_size: document.fileSize,
+      file_type: document.fileType,
+    }));
 
     const { error: documentsError } = await admin
       .from("case_documents")
@@ -696,18 +726,14 @@ export async function createAuthenticatedClientCaseAction(
   revalidatePath("/dashboard/client");
   revalidatePath("/dashboard/client/cases");
   revalidatePath("/dashboard/cases");
-  revalidatePath(
-    `/dashboard/client/cases/${createdCase.id}`,
-  );
+  revalidatePath(`/dashboard/client/cases/${createdCase.id}`);
   revalidatePath(`/dashboard/cases/${createdCase.id}`);
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/activity");
   revalidatePath("/dashboard/notifications");
   revalidatePath("/dashboard/audit");
 
-  redirect(
-    `/dashboard/client/cases/${createdCase.id}?success=case-created`,
-  );
+  redirect(`/dashboard/client/cases/${createdCase.id}?success=case-created`);
 }
 
 export async function sendAuthenticatedClientMessageAction(
@@ -781,9 +807,7 @@ export async function sendAuthenticatedClientMessageAction(
   revalidatePath("/dashboard/notifications");
   revalidatePath("/dashboard/audit");
 
-  redirect(
-    `/dashboard/client/cases/${caseId}?success=message-sent`,
-  );
+  redirect(`/dashboard/client/cases/${caseId}?success=message-sent`);
 }
 
 export async function uploadAuthenticatedClientDocumentAction(
@@ -834,28 +858,22 @@ export async function uploadAuthenticatedClientDocumentAction(
     });
   } catch (error) {
     const message =
-      error instanceof Error
-        ? error.message
-        : "Erro ao enviar documentos.";
+      error instanceof Error ? error.message : "Erro ao enviar documentos.";
 
     redirect(
-      `/dashboard/client/cases/${caseId}?error=${encodeURIComponent(
-        message,
-      )}`,
+      `/dashboard/client/cases/${caseId}?error=${encodeURIComponent(message)}`,
     );
   }
 
-  const documentsToInsert = uploadedDocuments.map(
-    (uploadedDocument) => ({
-      tenant_id: legalCase.tenant_id,
-      case_id: legalCase.id,
-      sender_type: "client",
-      file_name: uploadedDocument.fileName,
-      storage_path: uploadedDocument.storagePath,
-      file_size: uploadedDocument.fileSize,
-      file_type: uploadedDocument.fileType,
-    }),
-  );
+  const documentsToInsert = uploadedDocuments.map((uploadedDocument) => ({
+    tenant_id: legalCase.tenant_id,
+    case_id: legalCase.id,
+    sender_type: "client",
+    file_name: uploadedDocument.fileName,
+    storage_path: uploadedDocument.storagePath,
+    file_size: uploadedDocument.fileSize,
+    file_type: uploadedDocument.fileType,
+  }));
 
   const { error: insertError } = await admin
     .from("case_documents")
@@ -900,7 +918,5 @@ export async function uploadAuthenticatedClientDocumentAction(
   revalidatePath("/dashboard/notifications");
   revalidatePath("/dashboard/audit");
 
-  redirect(
-    `/dashboard/client/cases/${caseId}?success=document-uploaded`,
-  );
+  redirect(`/dashboard/client/cases/${caseId}?success=document-uploaded`);
 }
