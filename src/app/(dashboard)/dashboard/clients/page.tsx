@@ -32,8 +32,14 @@ function getClientTypeFullLabel(type: string | null): string {
 }
 
 function getClientTypeClassName(type: string | null): string {
-  if (type === "PF") return "border-blue-200 bg-blue-50 text-blue-700";
-  if (type === "PJ") return "border-purple-200 bg-purple-50 text-purple-700";
+  if (type === "PF") {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+
+  if (type === "PJ") {
+    return "border-purple-200 bg-purple-50 text-purple-700";
+  }
+
   return "border-[#D8D2C7] bg-[#F8F6F1] text-[#5B6472]";
 }
 
@@ -49,19 +55,27 @@ function normalizeSearch(value: string | undefined): string {
   return (value ?? "").trim().toLowerCase();
 }
 
-function getValidTypeFilter(type: string | undefined): ClientTypeFilter {
+function getValidTypeFilter(
+  type: string | undefined,
+): ClientTypeFilter {
   if (type === "PF") return "PF";
   if (type === "PJ") return "PJ";
+
   return "all";
 }
 
-function getValidStatusFilter(status: string | undefined): ClientStatusFilter {
+function getValidStatusFilter(
+  status: string | undefined,
+): ClientStatusFilter {
   if (status === "archived") return "archived";
   if (status === "all") return "all";
+
   return "active";
 }
 
-function getSuccessMessage(success: string | undefined): string | null {
+function getSuccessMessage(
+  success: string | undefined,
+): string | null {
   if (success === "client-archived") {
     return "Cliente arquivado com sucesso.";
   }
@@ -91,45 +105,70 @@ function clientMatchesSearch(
   },
   search: string,
 ): boolean {
-  if (!search) return true;
+  if (!search) {
+    return true;
+  }
 
   return (
     client.name.toLowerCase().includes(search) ||
     (client.email ?? "").toLowerCase().includes(search) ||
     (client.phone ?? "").toLowerCase().includes(search) ||
     (client.document ?? "").toLowerCase().includes(search) ||
-    getClientTypeFullLabel(client.type).toLowerCase().includes(search)
+    getClientTypeFullLabel(client.type)
+      .toLowerCase()
+      .includes(search)
   );
 }
 
 function clientMatchesType(
-  client: { type: string },
+  client: {
+    type: string;
+  },
   type: ClientTypeFilter,
 ): boolean {
-  if (type === "all") return true;
+  if (type === "all") {
+    return true;
+  }
 
   return client.type === type;
 }
 
 function clientMatchesStatus(
-  client: { active: boolean },
+  client: {
+    active: boolean;
+  },
   status: ClientStatusFilter,
 ): boolean {
-  if (status === "all") return true;
-  if (status === "archived") return !client.active;
+  if (status === "all") {
+    return true;
+  }
+
+  if (status === "archived") {
+    return !client.active;
+  }
 
   return client.active;
 }
 
-export default async function ClientsPage({ searchParams }: ClientsPageProps) {
-  const resolvedSearchParams = searchParams ? await searchParams : {};
+export default async function ClientsPage({
+  searchParams,
+}: ClientsPageProps) {
+  const resolvedSearchParams = searchParams
+    ? await searchParams
+    : {};
 
   const clients = await listClients();
 
   const search = normalizeSearch(resolvedSearchParams.q);
-  const selectedType = getValidTypeFilter(resolvedSearchParams.type);
-  const selectedStatus = getValidStatusFilter(resolvedSearchParams.status);
-  const successMessage = getSuccessMessage(resolvedSearchParams.success);
+  const selectedType = getValidTypeFilter(
+    resolvedSearchParams.type,
+  );
+  const selectedStatus = getValidStatusFilter(
+    resolvedSearchParams.status,
+  );
+  const successMessage = getSuccessMessage(
+    resolvedSearchParams.success,
+  );
 
   const filteredClients = clients.filter(
     (client) =>
@@ -138,13 +177,26 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
       clientMatchesStatus(client, selectedStatus),
   );
 
-  const activeClients = clients.filter((client) => client.active);
-  const archivedClients = clients.filter((client) => !client.active);
-  const pfClients = clients.filter((client) => client.type === "PF");
-  const pjClients = clients.filter((client) => client.type === "PJ");
+  const activeClients = clients.filter(
+    (client) => client.active,
+  );
+
+  const archivedClients = clients.filter(
+    (client) => !client.active,
+  );
+
+  const pfClients = clients.filter(
+    (client) => client.type === "PF",
+  );
+
+  const pjClients = clients.filter(
+    (client) => client.type === "PJ",
+  );
 
   const hasFilters =
-    search.length > 0 || selectedType !== "all" || selectedStatus !== "active";
+    search.length > 0 ||
+    selectedType !== "all" ||
+    selectedStatus !== "active";
 
   return (
     <section className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -160,9 +212,9 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[#B8C2CC]">
-              Gerencie pessoas físicas e jurídicas, acompanhe clientes ativos,
-              arquivados e inicie novos casos diretamente pela base do
-              escritório.
+              Gerencie pessoas físicas e jurídicas, acompanhe
+              clientes ativos, arquivados e inicie novos casos
+              diretamente pela base do escritório.
             </p>
           </div>
 
@@ -197,45 +249,90 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
       ) : null}
 
       <section className="grid gap-4 md:grid-cols-5">
-        <div className="rounded-3xl border border-[#D8D2C7] bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-[#5B6472]">Total</p>
+        <Link
+          href="/dashboard/clients?status=all&type=all"
+          className="rounded-3xl border border-[#D8D2C7] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#C89B4A]/60 hover:shadow-md"
+        >
+          <p className="text-sm font-semibold text-[#5B6472]">
+            Total
+          </p>
+
           <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
             {clients.length}
           </strong>
-          <p className="mt-2 text-xs text-[#5B6472]">Base completa</p>
-        </div>
 
-        <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-emerald-700">Ativos</p>
+          <p className="mt-2 text-xs text-[#5B6472]">
+            Base completa
+          </p>
+        </Link>
+
+        <Link
+          href="/dashboard/clients?status=active&type=all"
+          className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+        >
+          <p className="text-sm font-semibold text-emerald-700">
+            Ativos
+          </p>
+
           <strong className="mt-2 block text-3xl font-bold text-emerald-700">
             {activeClients.length}
           </strong>
-          <p className="mt-2 text-xs text-[#5B6472]">Em relacionamento</p>
-        </div>
 
-        <div className="rounded-3xl border border-red-100 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-red-700">Arquivados</p>
+          <p className="mt-2 text-xs text-[#5B6472]">
+            Em relacionamento
+          </p>
+        </Link>
+
+        <Link
+          href="/dashboard/clients?status=archived&type=all"
+          className="rounded-3xl border border-red-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-red-300 hover:shadow-md"
+        >
+          <p className="text-sm font-semibold text-red-700">
+            Arquivados
+          </p>
+
           <strong className="mt-2 block text-3xl font-bold text-red-700">
             {archivedClients.length}
           </strong>
-          <p className="mt-2 text-xs text-[#5B6472]">Fora da operação</p>
-        </div>
 
-        <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-blue-700">PF</p>
+          <p className="mt-2 text-xs text-[#5B6472]">
+            Fora da operação
+          </p>
+        </Link>
+
+        <Link
+          href="/dashboard/clients?status=all&type=PF"
+          className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+        >
+          <p className="text-sm font-semibold text-blue-700">
+            PF
+          </p>
+
           <strong className="mt-2 block text-3xl font-bold text-blue-700">
             {pfClients.length}
           </strong>
-          <p className="mt-2 text-xs text-[#5B6472]">Pessoas físicas</p>
-        </div>
 
-        <div className="rounded-3xl border border-purple-100 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-purple-700">PJ</p>
+          <p className="mt-2 text-xs text-[#5B6472]">
+            Pessoas físicas
+          </p>
+        </Link>
+
+        <Link
+          href="/dashboard/clients?status=all&type=PJ"
+          className="rounded-3xl border border-purple-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-md"
+        >
+          <p className="text-sm font-semibold text-purple-700">
+            PJ
+          </p>
+
           <strong className="mt-2 block text-3xl font-bold text-purple-700">
             {pjClients.length}
           </strong>
-          <p className="mt-2 text-xs text-[#5B6472]">Pessoas jurídicas</p>
-        </div>
+
+          <p className="mt-2 text-xs text-[#5B6472]">
+            Pessoas jurídicas
+          </p>
+        </Link>
       </section>
 
       <section className="overflow-hidden rounded-[1.75rem] border border-[#D8D2C7] bg-white shadow-sm">
@@ -374,13 +471,33 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
             <table className="w-full min-w-[1060px] text-left text-sm">
               <thead className="border-b border-[#ECE7DD] bg-[#0B1D2D] text-white">
                 <tr>
-                  <th className="px-5 py-4 font-semibold">Nome</th>
-                  <th className="px-5 py-4 font-semibold">Tipo</th>
-                  <th className="px-5 py-4 font-semibold">Status</th>
-                  <th className="px-5 py-4 font-semibold">Documento</th>
-                  <th className="px-5 py-4 font-semibold">E-mail</th>
-                  <th className="px-5 py-4 font-semibold">Telefone</th>
-                  <th className="px-5 py-4 text-right font-semibold">Ações</th>
+                  <th className="px-5 py-4 font-semibold">
+                    Nome
+                  </th>
+
+                  <th className="px-5 py-4 font-semibold">
+                    Tipo
+                  </th>
+
+                  <th className="px-5 py-4 font-semibold">
+                    Status
+                  </th>
+
+                  <th className="px-5 py-4 font-semibold">
+                    Documento
+                  </th>
+
+                  <th className="px-5 py-4 font-semibold">
+                    E-mail
+                  </th>
+
+                  <th className="px-5 py-4 font-semibold">
+                    Telefone
+                  </th>
+
+                  <th className="px-5 py-4 text-right font-semibold">
+                    Ações
+                  </th>
                 </tr>
               </thead>
 
@@ -452,29 +569,20 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
                         </Link>
 
                         {client.active ? (
-                          <>
-                            <Link
-                              href={`/dashboard/cases/new?clientId=${client.id}`}
-                              className="inline-flex items-center justify-center rounded-xl bg-[#0B1D2D] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#132D44]"
+                          <form action={archiveClientAction}>
+                            <input
+                              type="hidden"
+                              name="clientId"
+                              value={client.id}
+                            />
+
+                            <button
+                              type="submit"
+                              className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-100"
                             >
-                              Novo caso
-                            </Link>
-
-                            <form action={archiveClientAction}>
-                              <input
-                                type="hidden"
-                                name="clientId"
-                                value={client.id}
-                              />
-
-                              <button
-                                type="submit"
-                                className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-                              >
-                                Arquivar
-                              </button>
-                            </form>
-                          </>
+                              Arquivar
+                            </button>
+                          </form>
                         ) : (
                           <form action={restoreClientAction}>
                             <input
@@ -485,7 +593,7 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
 
                             <button
                               type="submit"
-                              className="inline-flex items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                              className="inline-flex items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
                             >
                               Reativar
                             </button>

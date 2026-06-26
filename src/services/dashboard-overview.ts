@@ -66,6 +66,8 @@ export type DashboardOverviewSummary = {
   total_clients: number;
   active_clients: number;
   archived_clients: number;
+  pf_clients: number;
+  pj_clients: number;
   total_cases: number;
   new_cases: number;
   in_progress_cases: number;
@@ -124,7 +126,10 @@ function parseDateOnly(value: string | null): Date | null {
   return new Date(year, month - 1, day);
 }
 
-function isCaseStatus(status: string, expectedStatus: CaseStatus): boolean {
+function isCaseStatus(
+  status: string,
+  expectedStatus: CaseStatus,
+): boolean {
   return status === expectedStatus;
 }
 
@@ -196,15 +201,20 @@ function sortTasksByUrgency(
   }
 
   const firstDueTime =
-    parseDateOnly(first.due_date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    parseDateOnly(first.due_date)?.getTime() ??
+    Number.MAX_SAFE_INTEGER;
 
   const secondDueTime =
-    parseDateOnly(second.due_date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    parseDateOnly(second.due_date)?.getTime() ??
+    Number.MAX_SAFE_INTEGER;
 
   return firstDueTime - secondDueTime;
 }
 
-function limitItems<TItem>(items: TItem[], limit: number): TItem[] {
+function limitItems<TItem>(
+  items: TItem[],
+  limit: number,
+): TItem[] {
   return items.slice(0, limit);
 }
 
@@ -219,7 +229,10 @@ export async function getDashboardOverview(): Promise<DashboardOverviewResult> {
     redirect("/dashboard/master");
   }
 
-  if (context.role !== "lawyer" && context.role !== "master") {
+  if (
+    context.role !== "lawyer" &&
+    context.role !== "master"
+  ) {
     redirect("/dashboard");
   }
 
@@ -229,57 +242,72 @@ export async function getDashboardOverview(): Promise<DashboardOverviewResult> {
 
   const supabase = await createSupabaseServerClient();
 
-  const { data: clientsData, error: clientsError } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("tenant_id", context.tenant.id)
-    .order("created_at", { ascending: false });
+  const { data: clientsData, error: clientsError } =
+    await supabase
+      .from("clients")
+      .select("*")
+      .eq("tenant_id", context.tenant.id)
+      .order("created_at", { ascending: false });
 
   if (clientsError) {
-    throw new Error("Não foi possível carregar os clientes do dashboard.");
+    throw new Error(
+      "Não foi possível carregar os clientes do dashboard.",
+    );
   }
 
-  const { data: casesData, error: casesError } = await supabase
-    .from("cases")
-    .select("*")
-    .eq("tenant_id", context.tenant.id)
-    .order("created_at", { ascending: false });
+  const { data: casesData, error: casesError } =
+    await supabase
+      .from("cases")
+      .select("*")
+      .eq("tenant_id", context.tenant.id)
+      .order("created_at", { ascending: false });
 
   if (casesError) {
-    throw new Error("Não foi possível carregar os casos do dashboard.");
+    throw new Error(
+      "Não foi possível carregar os casos do dashboard.",
+    );
   }
 
-  const { data: tasksData, error: tasksError } = await supabase
-    .from("case_tasks")
-    .select("*")
-    .eq("tenant_id", context.tenant.id)
-    .order("created_at", { ascending: false })
-    .limit(120);
+  const { data: tasksData, error: tasksError } =
+    await supabase
+      .from("case_tasks")
+      .select("*")
+      .eq("tenant_id", context.tenant.id)
+      .order("created_at", { ascending: false })
+      .limit(120);
 
   if (tasksError) {
-    throw new Error("Não foi possível carregar as tarefas do dashboard.");
+    throw new Error(
+      "Não foi possível carregar as tarefas do dashboard.",
+    );
   }
 
-  const { data: messagesData, error: messagesError } = await supabase
-    .from("messages")
-    .select("*")
-    .eq("tenant_id", context.tenant.id)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  const { data: messagesData, error: messagesError } =
+    await supabase
+      .from("messages")
+      .select("*")
+      .eq("tenant_id", context.tenant.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
 
   if (messagesError) {
-    throw new Error("Não foi possível carregar as mensagens recentes.");
+    throw new Error(
+      "Não foi possível carregar as mensagens recentes.",
+    );
   }
 
-  const { data: documentsData, error: documentsError } = await supabase
-    .from("case_documents")
-    .select("*")
-    .eq("tenant_id", context.tenant.id)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  const { data: documentsData, error: documentsError } =
+    await supabase
+      .from("case_documents")
+      .select("*")
+      .eq("tenant_id", context.tenant.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
 
   if (documentsError) {
-    throw new Error("Não foi possível carregar os documentos recentes.");
+    throw new Error(
+      "Não foi possível carregar os documentos recentes.",
+    );
   }
 
   const clients: ClientRow[] = clientsData ?? [];
@@ -298,14 +326,19 @@ export async function getDashboardOverview(): Promise<DashboardOverviewResult> {
   let relatedCases: CaseRow[] = cases;
 
   if (relatedCaseIds.length > 0) {
-    const { data: relatedCasesData, error: relatedCasesError } = await supabase
+    const {
+      data: relatedCasesData,
+      error: relatedCasesError,
+    } = await supabase
       .from("cases")
       .select("*")
       .eq("tenant_id", context.tenant.id)
       .in("id", relatedCaseIds);
 
     if (relatedCasesError) {
-      throw new Error("Não foi possível carregar os casos relacionados.");
+      throw new Error(
+        "Não foi possível carregar os casos relacionados.",
+      );
     }
 
     relatedCases = relatedCasesData ?? [];
@@ -320,15 +353,19 @@ export async function getDashboardOverview(): Promise<DashboardOverviewResult> {
   let relatedClients: ClientRow[] = [];
 
   if (clientIds.length > 0) {
-    const { data: relatedClientsData, error: relatedClientsError } =
-      await supabase
-        .from("clients")
-        .select("*")
-        .eq("tenant_id", context.tenant.id)
-        .in("id", clientIds);
+    const {
+      data: relatedClientsData,
+      error: relatedClientsError,
+    } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("tenant_id", context.tenant.id)
+      .in("id", clientIds);
 
     if (relatedClientsError) {
-      throw new Error("Não foi possível carregar os clientes do dashboard.");
+      throw new Error(
+        "Não foi possível carregar os clientes do dashboard.",
+      );
     }
 
     relatedClients = relatedClientsData ?? [];
@@ -347,8 +384,13 @@ export async function getDashboardOverview(): Promise<DashboardOverviewResult> {
 
   const pendingTasks = tasks.filter(isTaskPending);
 
-  const latestCases: DashboardOverviewCase[] = limitItems(cases, 6).map(
-    (caseItem) => {
+  const latestCases: DashboardOverviewCase[] =
+    limitItems(
+      cases.filter(
+        (caseItem) => !isCaseClosed(caseItem.status),
+      ),
+      6,
+    ).map((caseItem) => {
       const client = clientsById.get(caseItem.client_id);
 
       return {
@@ -360,98 +402,130 @@ export async function getDashboardOverview(): Promise<DashboardOverviewResult> {
         created_at: caseItem.created_at,
         client_name: getClientName(client),
       };
-    },
-  );
+    });
 
-  const latestMessages: DashboardOverviewMessage[] = limitItems(
-    messages,
-    5,
-  ).map((message) => {
-    const caseItem = casesById.get(message.case_id);
-    const client = caseItem ? clientsById.get(caseItem.client_id) : undefined;
+  const latestMessages: DashboardOverviewMessage[] =
+    limitItems(messages, 5).map((message) => {
+      const caseItem = casesById.get(message.case_id);
 
-    return {
-      id: message.id,
-      content: message.content,
-      sender_type: message.sender_type,
-      created_at: message.created_at,
-      case_id: message.case_id,
-      case_title: caseItem?.title ?? "Caso não encontrado",
-      client_name: getClientName(client),
-    };
-  });
+      const client = caseItem
+        ? clientsById.get(caseItem.client_id)
+        : undefined;
 
-  const latestDocuments: DashboardOverviewDocument[] = limitItems(
-    documents,
-    5,
-  ).map((document) => {
-    const caseItem = casesById.get(document.case_id);
-    const client = caseItem ? clientsById.get(caseItem.client_id) : undefined;
+      return {
+        id: message.id,
+        content: message.content,
+        sender_type: message.sender_type,
+        created_at: message.created_at,
+        case_id: message.case_id,
+        case_title:
+          caseItem?.title ?? "Caso não encontrado",
+        client_name: getClientName(client),
+      };
+    });
 
-    return {
-      id: document.id,
-      file_name: document.file_name,
-      sender_type: document.sender_type,
-      created_at: document.created_at,
-      case_id: document.case_id,
-      case_title: caseItem?.title ?? "Caso não encontrado",
-      client_name: getClientName(client),
-    };
-  });
+  const latestDocuments: DashboardOverviewDocument[] =
+    limitItems(documents, 5).map((document) => {
+      const caseItem = casesById.get(document.case_id);
 
-  const urgentTasks: DashboardOverviewTask[] = limitItems(
-    pendingTasks
-      .map((task) => {
-        const caseItem = casesById.get(task.case_id);
-        const client = caseItem
-          ? clientsById.get(caseItem.client_id)
-          : undefined;
+      const client = caseItem
+        ? clientsById.get(caseItem.client_id)
+        : undefined;
 
-        return {
-          id: task.id,
-          title: task.title,
-          priority: task.priority,
-          due_date: task.due_date,
-          case_id: task.case_id,
-          case_title: caseItem?.title ?? "Caso não encontrado",
-          client_name: getClientName(client),
-          is_overdue: getIsOverdue(task.due_date),
-          is_due_today: getIsDueToday(task.due_date),
-        };
-      })
-      .sort(sortTasksByUrgency),
-    6,
-  );
+      return {
+        id: document.id,
+        file_name: document.file_name,
+        sender_type: document.sender_type,
+        created_at: document.created_at,
+        case_id: document.case_id,
+        case_title:
+          caseItem?.title ?? "Caso não encontrado",
+        client_name: getClientName(client),
+      };
+    });
+
+  const urgentTasks: DashboardOverviewTask[] =
+    limitItems(
+      pendingTasks
+        .map((task) => {
+          const caseItem = casesById.get(task.case_id);
+
+          const client = caseItem
+            ? clientsById.get(caseItem.client_id)
+            : undefined;
+
+          return {
+            id: task.id,
+            title: task.title,
+            priority: task.priority,
+            due_date: task.due_date,
+            case_id: task.case_id,
+            case_title:
+              caseItem?.title ?? "Caso não encontrado",
+            client_name: getClientName(client),
+            is_overdue: getIsOverdue(task.due_date),
+            is_due_today: getIsDueToday(task.due_date),
+          };
+        })
+        .sort(sortTasksByUrgency),
+      6,
+    );
 
   return {
     tenant_id: context.tenant.id,
     tenant_name: context.tenant.name,
+
     summary: {
       total_clients: clients.length,
-      active_clients: clients.filter((client) => client.active).length,
-      archived_clients: clients.filter((client) => !client.active).length,
+
+      active_clients: clients.filter(
+        (client) => client.active,
+      ).length,
+
+      archived_clients: clients.filter(
+        (client) => !client.active,
+      ).length,
+
+      pf_clients: clients.filter(
+        (client) => client.type === "PF",
+      ).length,
+
+      pj_clients: clients.filter(
+        (client) => client.type === "PJ",
+      ).length,
+
       total_cases: cases.length,
+
       new_cases: cases.filter((caseItem) =>
         isCaseStatus(caseItem.status, "new"),
       ).length,
+
       in_progress_cases: cases.filter((caseItem) =>
         isCaseStatus(caseItem.status, "in_progress"),
       ).length,
+
       waiting_client_cases: cases.filter((caseItem) =>
         isCaseStatus(caseItem.status, "waiting_client"),
       ).length,
-      closed_cases: cases.filter((caseItem) => isCaseClosed(caseItem.status))
-        .length,
+
+      closed_cases: cases.filter((caseItem) =>
+        isCaseClosed(caseItem.status),
+      ).length,
+
       pending_tasks: pendingTasks.length,
+
       overdue_tasks: pendingTasks.filter((task) =>
         getIsOverdue(task.due_date),
       ).length,
+
       due_today_tasks: pendingTasks.filter((task) =>
         getIsDueToday(task.due_date),
       ).length,
+
       recent_messages: messages.length,
       recent_documents: documents.length,
     },
+
     latest_cases: latestCases,
     latest_messages: latestMessages,
     latest_documents: latestDocuments,

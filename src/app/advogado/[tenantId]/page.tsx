@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { MaskedInput } from "@/src/components/forms/MaskedInput";
+import { PublicAccountAccessFields } from "@/src/components/forms/PublicAccountAccessFields";
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin";
 import { createPublicCaseAction } from "@/src/services/public-intake";
 import type { Database } from "@/src/types/supabase";
@@ -33,9 +34,46 @@ function getPublicTitle(
 function getPublicSubtitle(
   settings: TenantPublicSettingsRow | null,
 ): string {
-  return (
-    settings?.public_subtitle ||
-    "Atendimento jurídico online com análise inicial organizada."
+  const subtitle = settings?.public_subtitle?.trim();
+
+  if (
+    !subtitle ||
+    subtitle ===
+      "Atendimento jurídico online com análise inicial organizada."
+  ) {
+    return "Atendimento jurídico online com análise inicial humanizada.";
+  }
+
+  return subtitle;
+}
+
+const DEFAULT_CASE_TITLE_SUGGESTIONS = [
+  "Trabalhista",
+  "Cível",
+  "Família",
+  "Previdenciário",
+  "Consumidor",
+  "Criminal",
+  "Tributário",
+  "Empresarial",
+  "Imobiliário",
+  "Administrativo",
+  "Contratual",
+  "Sucessões",
+  "Outros",
+] as const;
+
+function getCaseTitleSuggestions(
+  settings: TenantPublicSettingsRow | null,
+): string[] {
+  const practiceAreas = settings?.practice_areas ?? [];
+
+  return Array.from(
+    new Set(
+      [...practiceAreas, ...DEFAULT_CASE_TITLE_SUGGESTIONS]
+        .map((suggestion) => suggestion.trim())
+        .filter(Boolean),
+    ),
   );
 }
 
@@ -110,6 +148,9 @@ export default async function LawyerPublicPage({
   const whatsappUrl = getWhatsappUrl(
     settings?.whatsapp_number ?? null,
   );
+
+  const caseTitleSuggestions =
+    getCaseTitleSuggestions(settings);
 
   return (
     <main className="min-h-screen bg-[#0B1D2D] px-4 py-8 md:py-12">
@@ -251,61 +292,45 @@ export default async function LawyerPublicPage({
 
               <div className="rounded-2xl border border-[#D8D2C7] bg-white p-5">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#C89B4A]">
-                  Acesso ao portal
+                  Dados de acesso
                 </p>
 
                 <h3 className="mt-2 text-lg font-bold text-[#0B1D2D]">
-                  Crie ou acesse sua conta
+                  Informe o e-mail que será usado para acessar o portal
                 </h3>
 
                 <p className="mt-2 text-sm leading-6 text-[#5B6472]">
-                  Sua conta permitirá acompanhar este atendimento pelo painel
-                  do cliente.
+                  Este e-mail, junto com a senha escolhida abaixo, será
+                  utilizado para entrar no painel do cliente e acompanhar
+                  seus atendimentos.
                 </p>
 
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#E7D7B5] bg-[#FFF8E8] p-4">
-                    <input
-                      type="radio"
-                      name="accountMode"
-                      value="create"
-                      defaultChecked
-                      className="mt-1 h-4 w-4 accent-[#C89B4A]"
-                    />
-
-                    <span>
-                      <span className="block text-sm font-bold text-[#0B1D2D]">
-                        Criar minha conta
-                      </span>
-
-                      <span className="mt-1 block text-xs leading-5 text-[#7A5B24]">
-                        Escolha esta opção caso ainda não tenha acesso ao
-                        JUSCONECT ADV.
-                      </span>
-                    </span>
+                <div className="mt-4">
+                  <label
+                    htmlFor="email"
+                    className="mb-2 block text-sm font-bold text-[#0B1D2D]"
+                  >
+                    E-mail de acesso *
                   </label>
 
-                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-[#D8D2C7] bg-[#F8F6F1] p-4">
-                    <input
-                      type="radio"
-                      name="accountMode"
-                      value="login"
-                      className="mt-1 h-4 w-4 accent-[#C89B4A]"
-                    />
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    placeholder="seu@email.com"
+                    className="min-h-12 w-full rounded-2xl border border-[#D8D2C7] bg-white px-4 py-3 text-sm text-[#0B1D2D] outline-none transition placeholder:text-[#8FA0AE] focus:border-[#C89B4A] focus:ring-4 focus:ring-[#C89B4A]/10"
+                  />
 
-                    <span>
-                      <span className="block text-sm font-bold text-[#0B1D2D]">
-                        Já tenho uma conta
-                      </span>
-
-                      <span className="mt-1 block text-xs leading-5 text-[#5B6472]">
-                        Use o mesmo e-mail e senha, mesmo que sua conta tenha
-                        sido criada em outro escritório.
-                      </span>
-                    </span>
-                  </label>
+                  <p className="mt-2 text-xs leading-5 text-[#5B6472]">
+                    Use um e-mail válido, pois ele será o seu login de acesso
+                    ao JUSCONECT ADV.
+                  </p>
                 </div>
               </div>
+
+              <PublicAccountAccessFields />
 
               <div className="grid gap-5 md:grid-cols-2">
                 <div>
@@ -337,7 +362,7 @@ export default async function LawyerPublicPage({
                 </div>
               </div>
 
-              <div className="grid gap-5 md:grid-cols-3">
+              <div className="grid gap-5 md:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm font-bold text-[#0B1D2D]">
                     CPF/CNPJ
@@ -347,21 +372,6 @@ export default async function LawyerPublicPage({
                     name="document"
                     mask="cpfCnpj"
                     placeholder="CPF ou CNPJ"
-                    className="min-h-12 w-full rounded-2xl border border-[#D8D2C7] bg-white px-4 py-3 text-sm text-[#0B1D2D] outline-none transition placeholder:text-[#8FA0AE] focus:border-[#C89B4A] focus:ring-4 focus:ring-[#C89B4A]/10"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-bold text-[#0B1D2D]">
-                    E-mail *
-                  </label>
-
-                  <input
-                    name="email"
-                    type="email"
-                    required
-                    autoComplete="email"
-                    placeholder="seu@email.com"
                     className="min-h-12 w-full rounded-2xl border border-[#D8D2C7] bg-white px-4 py-3 text-sm text-[#0B1D2D] outline-none transition placeholder:text-[#8FA0AE] focus:border-[#C89B4A] focus:ring-4 focus:ring-[#C89B4A]/10"
                   />
                 </div>
@@ -380,43 +390,6 @@ export default async function LawyerPublicPage({
                 </div>
               </div>
 
-              <div className="grid gap-5 md:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-bold text-[#0B1D2D]">
-                    Senha de acesso *
-                  </label>
-
-                  <input
-                    name="password"
-                    type="password"
-                    required
-                    minLength={6}
-                    autoComplete="current-password"
-                    placeholder="Mínimo de 6 caracteres"
-                    className="min-h-12 w-full rounded-2xl border border-[#D8D2C7] bg-white px-4 py-3 text-sm text-[#0B1D2D] outline-none transition placeholder:text-[#8FA0AE] focus:border-[#C89B4A] focus:ring-4 focus:ring-[#C89B4A]/10"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-bold text-[#0B1D2D]">
-                    Confirmar senha
-                  </label>
-
-                  <input
-                    name="confirmPassword"
-                    type="password"
-                    minLength={6}
-                    autoComplete="new-password"
-                    placeholder="Repita a senha ao criar uma conta"
-                    className="min-h-12 w-full rounded-2xl border border-[#D8D2C7] bg-white px-4 py-3 text-sm text-[#0B1D2D] outline-none transition placeholder:text-[#8FA0AE] focus:border-[#C89B4A] focus:ring-4 focus:ring-[#C89B4A]/10"
-                  />
-
-                  <p className="mt-2 text-xs leading-5 text-[#5B6472]">
-                    Para quem já possui conta, este campo pode ficar vazio.
-                  </p>
-                </div>
-              </div>
-
               <div className="border-t border-[#E7E1D7] pt-5">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#C89B4A]">
                   Dados do atendimento
@@ -430,10 +403,26 @@ export default async function LawyerPublicPage({
 
                 <input
                   name="title"
+                  list="case-title-suggestions"
                   required
-                  placeholder="Ex: Problema trabalhista, cobrança indevida, contrato..."
+                  autoComplete="off"
+                  placeholder="Selecione uma opção ou digite um título diferente"
                   className="min-h-12 w-full rounded-2xl border border-[#D8D2C7] bg-white px-4 py-3 text-sm text-[#0B1D2D] outline-none transition placeholder:text-[#8FA0AE] focus:border-[#C89B4A] focus:ring-4 focus:ring-[#C89B4A]/10"
                 />
+
+                <datalist id="case-title-suggestions">
+                  {caseTitleSuggestions.map((suggestion) => (
+                    <option
+                      key={suggestion}
+                      value={suggestion}
+                    />
+                  ))}
+                </datalist>
+
+                <p className="mt-2 text-xs leading-5 text-[#5B6472]">
+                  Selecione uma sugestão ou escreva livremente um título mais
+                  específico para o seu caso.
+                </p>
               </div>
 
               <div>
@@ -487,9 +476,8 @@ export default async function LawyerPublicPage({
               <div className="rounded-2xl border border-[#D8D2C7] bg-white p-4">
                 <p className="text-xs leading-5 text-[#5B6472]">
                   Ao enviar, sua conta será criada ou autenticada e ficará
-                  vinculada exclusivamente a este escritório. A mesma conta
-                  poderá ser usada em outros escritórios que utilizem o
-                  JUSCONECT ADV.
+                  vinculada a este escritório. A mesma conta poderá ser usada
+                  para acessar outros escritórios que utilizem o JUSCONECT ADV.
                 </p>
               </div>
 

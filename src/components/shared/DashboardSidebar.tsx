@@ -145,6 +145,7 @@ const navigationGroups: readonly NavigationGroup[] = [
 
 type DashboardSidebarProps = {
   role: DashboardRole;
+  pendingMeetingCount?: number;
 };
 
 function getAllowedItems(
@@ -154,15 +155,32 @@ function getAllowedItems(
   return items.filter((item) => item.roles.includes(role));
 }
 
-function isActiveRoute(pathname: string, item: NavigationItem): boolean {
+function isActiveRoute(
+  pathname: string,
+  item: NavigationItem,
+): boolean {
   if (item.exact) {
     return pathname === item.href;
   }
 
-  return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  return (
+    pathname === item.href ||
+    pathname.startsWith(`${item.href}/`)
+  );
 }
 
-export function DashboardSidebar({ role }: DashboardSidebarProps) {
+function formatBadgeCount(count: number): string {
+  if (count > 99) {
+    return "99+";
+  }
+
+  return String(count);
+}
+
+export function DashboardSidebar({
+  role,
+  pendingMeetingCount = 0,
+}: DashboardSidebarProps) {
   const pathname = usePathname();
 
   const allowedGroups = navigationGroups
@@ -177,7 +195,9 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
       <div className="mb-9">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#C89B4A]/40 bg-[#0F273B] shadow-lg shadow-black/20">
-            <span className="text-lg font-bold text-[#C89B4A]">J</span>
+            <span className="text-lg font-bold text-[#C89B4A]">
+              J
+            </span>
           </div>
 
           <div>
@@ -186,7 +206,8 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
             </p>
 
             <h1 className="mt-1 text-xl font-bold tracking-wide text-white">
-              JUSCONECT <span className="text-[#C89B4A]">ADV</span>
+              JUSCONECT{" "}
+              <span className="text-[#C89B4A]">ADV</span>
             </h1>
           </div>
         </div>
@@ -207,6 +228,10 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
               {group.items.map((item) => {
                 const active = isActiveRoute(pathname, item);
 
+                const showMeetingBadge =
+                  item.href === "/dashboard/meetings" &&
+                  pendingMeetingCount > 0;
+
                 return (
                   <Link
                     key={item.href}
@@ -217,8 +242,22 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
                         : "block rounded-2xl border border-transparent px-4 py-3 text-[#D8DEE5] transition hover:border-[#C89B4A]/30 hover:bg-[#132D44] hover:text-white"
                     }
                   >
-                    <span className="block text-sm font-semibold">
-                      {item.label}
+                    <span className="flex items-center justify-between gap-3">
+                      <span className="block text-sm font-semibold">
+                        {item.label}
+                      </span>
+
+                      {showMeetingBadge ? (
+                        <span
+                          className="inline-flex min-h-6 min-w-6 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-black leading-none text-white shadow-md shadow-red-950/30"
+                          aria-label={`${pendingMeetingCount} solicitações de reunião pendentes`}
+                          title={`${pendingMeetingCount} solicitações de reunião pendentes`}
+                        >
+                          {formatBadgeCount(
+                            pendingMeetingCount,
+                          )}
+                        </span>
+                      ) : null}
                     </span>
 
                     {item.description ? (
@@ -247,8 +286,8 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
           </p>
 
           <p className="mt-2 text-xs leading-5 text-[#B8C2CC]">
-            Configure sua vitrine digital e compartilhe o link com novos
-            clientes.
+            Configure sua vitrine digital e compartilhe o link com
+            novos clientes.
           </p>
 
           <Link
@@ -267,7 +306,8 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
           </p>
 
           <p className="mt-2 text-xs leading-5 text-[#B8C2CC]">
-            Abra um atendimento ou solicite uma reunião com a equipe.
+            Abra um atendimento ou solicite uma reunião com a
+            equipe.
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">

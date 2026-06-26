@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { registerAction } from "@/src/app/(auth)/actions";
+
+import { RegisterForm } from "@/src/components/forms/RegisterForm";
 
 type RegisterPageProps = {
   searchParams: Promise<{
@@ -7,102 +8,49 @@ type RegisterPageProps = {
   }>;
 };
 
-export default async function RegisterPage({ searchParams }: RegisterPageProps) {
+export default async function RegisterPage({
+  searchParams,
+}: RegisterPageProps) {
   const params = await searchParams;
 
   return (
-    <section className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Criar conta</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Cadastre-se para acessar o JUSCONECT ADV.
+    <section className="w-full max-w-2xl overflow-hidden rounded-[2rem] border border-[#D8D2C7] bg-white shadow-2xl shadow-black/20">
+      <div className="bg-[#0B1D2D] p-7 md:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#C89B4A]">
+          JUSCONECT ADV
+        </p>
+
+        <h1 className="mt-3 text-3xl font-bold text-white">
+          Criar conta
+        </h1>
+
+        <p className="mt-2 max-w-xl text-sm leading-6 text-[#B8C2CC]">
+          Crie seu acesso para acompanhar atendimentos jurídicos ou
+          administrar seu escritório pela plataforma.
         </p>
       </div>
 
-      {params.error ? (
-        <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-          {params.error}
+      <div className="p-7 md:p-8">
+        {params.error ? (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+            {params.error}
+          </div>
+        ) : null}
+
+        <RegisterForm />
+
+        <div className="mt-7 border-t border-[#ECE7DD] pt-6 text-center">
+          <p className="text-sm text-[#5B6472]">
+            Já possui uma conta?{" "}
+            <Link
+              href="/login"
+              className="font-bold text-[#0B1D2D] transition hover:text-[#9E762D]"
+            >
+              Entrar
+            </Link>
+          </p>
         </div>
-      ) : null}
-
-      <form action={registerAction} className="space-y-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            Nome completo
-          </label>
-          <input
-            name="fullName"
-            type="text"
-            required
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-900"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            Tipo de conta
-          </label>
-          <select
-            name="role"
-            required
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-900"
-          >
-            <option value="client">Cliente</option>
-            <option value="lawyer">Advogado</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            Nome do escritório
-          </label>
-          <input
-            name="tenantName"
-            type="text"
-            placeholder="Obrigatório para advogado"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-900"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            Email
-          </label>
-          <input
-            name="email"
-            type="email"
-            required
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-900"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            Senha
-          </label>
-          <input
-            name="password"
-            type="password"
-            required
-            minLength={6}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-slate-900"
-          />
-        </div>
-
-        <button
-          type="submit"
-          className="w-full rounded-lg bg-slate-950 px-4 py-2 font-medium text-white hover:bg-slate-800"
-        >
-          Criar conta
-        </button>
-      </form>
-
-      <p className="mt-6 text-center text-sm text-slate-600">
-        Já tem conta?{" "}
-        <Link href="/login" className="font-medium text-slate-950">
-          Entrar
-        </Link>
-      </p>
+      </div>
     </section>
   );
 }

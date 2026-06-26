@@ -71,19 +71,31 @@ function isAllowedTenantMemberRole(role: string): boolean {
   return role === "owner" || role === "staff";
 }
 
-function normalizeSearchText(value: string): string {
-  return value.trim().toLowerCase();
+function normalizeSearchText(
+  value: string | null | undefined,
+): string {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
-function includesSearch(value: string | null | undefined, query: string): boolean {
+function includesSearch(
+  value: string | null | undefined,
+  query: string,
+): boolean {
   if (!value) {
     return false;
   }
 
-  return value.toLowerCase().includes(query);
+  return normalizeSearchText(value).includes(query);
 }
 
-function clientMatchesSearch(client: ClientRow, query: string): boolean {
+function clientMatchesSearch(
+  client: ClientRow,
+  query: string,
+): boolean {
   return (
     includesSearch(client.name, query) ||
     includesSearch(client.type, query) ||
@@ -93,7 +105,10 @@ function clientMatchesSearch(client: ClientRow, query: string): boolean {
   );
 }
 
-function caseMatchesSearch(legalCase: CaseRow, query: string): boolean {
+function caseMatchesSearch(
+  legalCase: CaseRow,
+  query: string,
+): boolean {
   return (
     includesSearch(legalCase.title, query) ||
     includesSearch(legalCase.description, query) ||
@@ -102,21 +117,153 @@ function caseMatchesSearch(legalCase: CaseRow, query: string): boolean {
   );
 }
 
-function messageMatchesSearch(message: MessageRow, query: string): boolean {
+function messageMatchesSearch(
+  message: MessageRow,
+  query: string,
+): boolean {
   return (
     includesSearch(message.content, query) ||
     includesSearch(message.sender_type, query)
   );
 }
 
-function documentMatchesSearch(
-  document: CaseDocumentRow,
-  query: string,
-): boolean {
+function documentMatchesSearch(params: {
+  document: CaseDocumentRow;
+  legalCase: CaseRow | undefined;
+  client: ClientRow | undefined;
+  query: string;
+}): boolean {
+  const {
+    document,
+    legalCase,
+    client,
+    query,
+  } = params;
+
   return (
     includesSearch(document.file_name, query) ||
     includesSearch(document.file_type, query) ||
-    includesSearch(document.sender_type, query)
+    includesSearch(document.sender_type, query) ||
+    includesSearch(legalCase?.title, query) ||
+    includesSearch(legalCase?.description, query) ||
+    includesSearch(client?.name, query) ||
+    includesSearch(client?.document, query) ||
+    includesSearch(client?.email, query) ||
+    includesSearch(client?.phone, query)
+  );
+}
+
+function sortByCreatedAtDesc<
+  TItem extends {
+    created_at: string;
+  },
+>(
+  first: TItem,
+  second: TItem,
+): number {
+  return (
+    new Date(second.created_at).getTime() -
+    new Date(first.created_at).getTime()
+  );
+}
+
+function getDocumentUniqueKey(
+  document: CaseDocumentRow,
+): string {
+  const storagePath =
+    "storage_path" in document &&
+    typeof document.storage_path === "string"
+      ? document.storage_path.trim().toLowerCase()
+      : "";
+
+  if (storagePath) {
+    return `storage:${storagePath}`;
+  }
+
+  return [
+    document.case_id,
+    normalizeSearchText(document.file_name),
+    normalizeSearchText(document.file_type),
+    normalizeSearchText(document.sender_type),
+    "file_size" in document
+      ? String(document.file_size ?? "")
+      : "",
+  ].join(":");
+}
+
+function removeDuplicateDocuments(
+  documents: CaseDocumentRow[],
+): CaseDocumentRow[] {
+  const uniqueDocuments =
+    new Map<string, CaseDocumentRow>();
+
+  [...documents]
+    .sort(sortByCreatedAtDesc)
+    .forEach((document) => {
+      const key = getDocumentUniqueKey(document);
+
+      if (!uniqueDocuments.has(key)) {
+        uniqueDocuments.set(key, document);
+      }
+    });
+
+  return Array.from(
+    uniqueDocuments.values(),
+  ).sort(sortByCreatedAtDesc);
+}
+
+async function loadDocumentsFromTenantCases(params: {
+  tenantId: string;
+  cases: CaseRow[];
+}): Promise<CaseDocumentRow[]> {
+  const { tenantId, cases } = params;
+
+  if (cases.length === 0) {
+    return [];
+  }
+
+  const admin = createSupabaseAdminClient();
+
+  const caseIds = cases.map(
+    (legalCase) => legalCase.id,
+  );
+
+  /*
+   * Os documentos são localizados pelos casos que já foram
+   * validados como pertencentes ao escritório.
+   *
+   * Isso também permite localizar registros antigos em que o
+   * tenant_id do documento não tenha sido preenchido corretamente.
+   */
+  const { data, error } = await admin
+    .from("case_documents")
+    .select("*")
+    .in("case_id", caseIds)
+    .order("created_at", {
+      ascending: false,
+    })
+    .limit(1000);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const allowedCaseIds = new Set(caseIds);
+
+  const safeDocuments = (data ?? []).filter(
+    (document) =>
+      allowedCaseIds.has(document.case_id) &&
+      /*
+       * Quando o documento possui tenant_id, ele também precisa
+       * corresponder ao escritório atual. Registros antigos sem
+       * tenant_id continuam protegidos pelo vínculo com o caso.
+       */
+      (!document.tenant_id ||
+        document.tenant_id === tenantId),
+  );
+
+  return removeDuplicateDocuments(
+    safeDocuments,
   );
 }
 
@@ -129,13 +276,19 @@ export async function searchLawyerWorkspace(
     redirect("/dashboard/client");
   }
 
-  if (!isAllowedProfileRole(context.role) || !context.tenant) {
+  if (
+    !isAllowedProfileRole(context.role) ||
+    !context.tenant
+  ) {
     redirect("/dashboard");
   }
 
   const admin = createSupabaseAdminClient();
 
-  const { data: membership, error: membershipError } = await admin
+  const {
+    data: membership,
+    error: membershipError,
+  } = await admin
     .from("tenant_members")
     .select("role, is_active")
     .eq("tenant_id", context.tenant.id)
@@ -146,12 +299,15 @@ export async function searchLawyerWorkspace(
   if (
     membershipError ||
     !membership ||
-    !isAllowedTenantMemberRole(membership.role)
+    !isAllowedTenantMemberRole(
+      membership.role,
+    )
   ) {
     redirect("/dashboard");
   }
 
-  const query = normalizeSearchText(rawQuery);
+  const query =
+    normalizeSearchText(rawQuery);
 
   if (query.length < 2) {
     return {
@@ -168,135 +324,257 @@ export async function searchLawyerWorkspace(
     clientsResponse,
     casesResponse,
     messagesResponse,
-    documentsResponse,
   ] = await Promise.all([
     admin
       .from("clients")
       .select("*")
-      .eq("tenant_id", context.tenant.id)
-      .order("created_at", { ascending: false })
-      .limit(300),
+      .eq(
+        "tenant_id",
+        context.tenant.id,
+      )
+      .order("created_at", {
+        ascending: false,
+      })
+      .limit(1000),
 
     admin
       .from("cases")
       .select("*")
-      .eq("tenant_id", context.tenant.id)
-      .order("created_at", { ascending: false })
-      .limit(300),
+      .eq(
+        "tenant_id",
+        context.tenant.id,
+      )
+      .order("created_at", {
+        ascending: false,
+      })
+      .limit(1000),
 
     admin
       .from("messages")
       .select("*")
-      .eq("tenant_id", context.tenant.id)
-      .order("created_at", { ascending: false })
-      .limit(300),
-
-    admin
-      .from("case_documents")
-      .select("*")
-      .eq("tenant_id", context.tenant.id)
-      .order("created_at", { ascending: false })
-      .limit(300),
+      .eq(
+        "tenant_id",
+        context.tenant.id,
+      )
+      .order("created_at", {
+        ascending: false,
+      })
+      .limit(1000),
   ]);
 
   if (clientsResponse.error) {
-    throw new Error(clientsResponse.error.message);
+    throw new Error(
+      clientsResponse.error.message,
+    );
   }
 
   if (casesResponse.error) {
-    throw new Error(casesResponse.error.message);
+    throw new Error(
+      casesResponse.error.message,
+    );
   }
 
   if (messagesResponse.error) {
-    throw new Error(messagesResponse.error.message);
+    throw new Error(
+      messagesResponse.error.message,
+    );
   }
 
-  if (documentsResponse.error) {
-    throw new Error(documentsResponse.error.message);
-  }
+  const clients: ClientRow[] =
+    clientsResponse.data ?? [];
 
-  const clients = clientsResponse.data ?? [];
-  const cases = casesResponse.data ?? [];
-  const messages = messagesResponse.data ?? [];
-  const documents = documentsResponse.data ?? [];
+  const cases: CaseRow[] =
+    casesResponse.data ?? [];
 
-  const clientsById = new Map(clients.map((client) => [client.id, client]));
-  const casesById = new Map(cases.map((legalCase) => [legalCase.id, legalCase]));
+  const messages: MessageRow[] =
+    messagesResponse.data ?? [];
 
-  const clientResults: LawyerSearchClientResult[] = clients
-    .filter((client) => clientMatchesSearch(client, query))
-    .slice(0, 20)
-    .map((client) => ({
-      id: client.id,
-      name: client.name,
-      type: client.type,
-      document: client.document,
-      email: client.email,
-      phone: client.phone,
-      active: client.active,
-      href: `/dashboard/clients/${client.id}`,
-    }));
-
-  const caseResults: LawyerSearchCaseResult[] = cases
-    .filter((legalCase) => {
-      const client = clientsById.get(legalCase.client_id);
-
-      return (
-        caseMatchesSearch(legalCase, query) ||
-        includesSearch(client?.name, query) ||
-        includesSearch(client?.document, query) ||
-        includesSearch(client?.email, query)
-      );
-    })
-    .slice(0, 20)
-    .map((legalCase) => {
-      const client = clientsById.get(legalCase.client_id);
-
-      return {
-        id: legalCase.id,
-        title: legalCase.title,
-        description: legalCase.description,
-        status: legalCase.status,
-        priority: legalCase.priority,
-        client_name: client?.name ?? null,
-        href: `/dashboard/cases/${legalCase.id}`,
-      };
+  const documents =
+    await loadDocumentsFromTenantCases({
+      tenantId: context.tenant.id,
+      cases,
     });
 
-  const messageResults: LawyerSearchMessageResult[] = messages
-    .filter((message) => messageMatchesSearch(message, query))
-    .slice(0, 20)
-    .map((message) => {
-      const legalCase = casesById.get(message.case_id);
+  const clientsById = new Map(
+    clients.map((client) => [
+      client.id,
+      client,
+    ]),
+  );
 
-      return {
-        id: message.id,
-        case_id: message.case_id,
-        case_title: legalCase?.title ?? null,
-        sender_type: message.sender_type,
-        content: message.content,
-        created_at: message.created_at,
-        href: `/dashboard/cases/${message.case_id}`,
-      };
-    });
+  const casesById = new Map(
+    cases.map((legalCase) => [
+      legalCase.id,
+      legalCase,
+    ]),
+  );
 
-  const documentResults: LawyerSearchDocumentResult[] = documents
-    .filter((document) => documentMatchesSearch(document, query))
-    .slice(0, 20)
-    .map((document) => {
-      const legalCase = casesById.get(document.case_id);
+  const clientResults: LawyerSearchClientResult[] =
+    clients
+      .filter((client) =>
+        clientMatchesSearch(
+          client,
+          query,
+        ),
+      )
+      .slice(0, 20)
+      .map((client) => ({
+        id: client.id,
+        name: client.name,
+        type: client.type,
+        document: client.document,
+        email: client.email,
+        phone: client.phone,
+        active: client.active,
+        href: `/dashboard/clients/${client.id}`,
+      }));
 
-      return {
-        id: document.id,
-        case_id: document.case_id,
-        case_title: legalCase?.title ?? null,
-        sender_type: document.sender_type,
-        file_name: document.file_name,
-        file_type: document.file_type,
-        created_at: document.created_at,
-        href: `/dashboard/cases/${document.case_id}`,
-      };
-    });
+  const caseResults: LawyerSearchCaseResult[] =
+    cases
+      .filter((legalCase) => {
+        const client =
+          clientsById.get(
+            legalCase.client_id,
+          );
+
+        return (
+          caseMatchesSearch(
+            legalCase,
+            query,
+          ) ||
+          includesSearch(
+            client?.name,
+            query,
+          ) ||
+          includesSearch(
+            client?.document,
+            query,
+          ) ||
+          includesSearch(
+            client?.email,
+            query,
+          ) ||
+          includesSearch(
+            client?.phone,
+            query,
+          )
+        );
+      })
+      .slice(0, 20)
+      .map((legalCase) => {
+        const client =
+          clientsById.get(
+            legalCase.client_id,
+          );
+
+        return {
+          id: legalCase.id,
+          title: legalCase.title,
+          description:
+            legalCase.description,
+          status: legalCase.status,
+          priority:
+            legalCase.priority,
+          client_name:
+            client?.name ?? null,
+          href: `/dashboard/cases/${legalCase.id}`,
+        };
+      });
+
+  const messageResults: LawyerSearchMessageResult[] =
+    messages
+      .filter((message) => {
+        const legalCase =
+          casesById.get(
+            message.case_id,
+          );
+
+        const client = legalCase
+          ? clientsById.get(
+              legalCase.client_id,
+            )
+          : undefined;
+
+        return (
+          messageMatchesSearch(
+            message,
+            query,
+          ) ||
+          includesSearch(
+            legalCase?.title,
+            query,
+          ) ||
+          includesSearch(
+            client?.name,
+            query,
+          )
+        );
+      })
+      .slice(0, 20)
+      .map((message) => {
+        const legalCase =
+          casesById.get(
+            message.case_id,
+          );
+
+        return {
+          id: message.id,
+          case_id: message.case_id,
+          case_title:
+            legalCase?.title ?? null,
+          sender_type:
+            message.sender_type,
+          content: message.content,
+          created_at:
+            message.created_at,
+          href: `/dashboard/cases/${message.case_id}`,
+        };
+      });
+
+  const documentResults: LawyerSearchDocumentResult[] =
+    documents
+      .filter((document) => {
+        const legalCase =
+          casesById.get(
+            document.case_id,
+          );
+
+        const client = legalCase
+          ? clientsById.get(
+              legalCase.client_id,
+            )
+          : undefined;
+
+        return documentMatchesSearch({
+          document,
+          legalCase,
+          client,
+          query,
+        });
+      })
+      .slice(0, 20)
+      .map((document) => {
+        const legalCase =
+          casesById.get(
+            document.case_id,
+          );
+
+        return {
+          id: document.id,
+          case_id: document.case_id,
+          case_title:
+            legalCase?.title ?? null,
+          sender_type:
+            document.sender_type,
+          file_name:
+            document.file_name,
+          file_type:
+            document.file_type,
+          created_at:
+            document.created_at,
+          href: `/dashboard/cases/${document.case_id}`,
+        };
+      });
 
   const total =
     clientResults.length +

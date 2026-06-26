@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { SubmitButton } from "@/src/components/shared/SubmitButton";
 import { CaseInternalNotesSection } from "@/src/components/cases/CaseInternalNotesSection";
 import { CasePriorityBadge } from "@/src/components/cases/CasePriorityBadge";
 import { CaseStatusBadge } from "@/src/components/cases/CaseStatusBadge";
@@ -476,12 +477,12 @@ export default async function CaseDetailPage({
                     até 20MB.
                   </p>
 
-                  <button
-                    type="submit"
+                  <SubmitButton
+                    pendingText="Enviando documento(s)..."
                     className="mt-3 w-full rounded-xl bg-[#0B1D2D] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#132D44]"
                   >
                     Enviar documento(s)
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             </div>

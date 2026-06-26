@@ -201,6 +201,76 @@ function parseMeetingDateTime(value: string): string | null {
   return date.toISOString();
 }
 
+const MINIMUM_MEETING_LEAD_TIME_MS = 60 * 1000;
+
+function isMeetingInThePast(meetingAt: string): boolean {
+  const meetingDate = new Date(meetingAt);
+
+  return meetingDate.getTime() <= Date.now() + MINIMUM_MEETING_LEAD_TIME_MS;
+}
+
+function getMeetingEndDate(
+  meetingAt: string,
+  durationMinutes: number,
+): Date {
+  const start = new Date(meetingAt);
+
+  return new Date(start.getTime() + durationMinutes * 60 * 1000);
+}
+
+function meetingsOverlap(params: {
+  firstStart: string;
+  firstDurationMinutes: number;
+  secondStart: string;
+  secondDurationMinutes: number;
+}): boolean {
+  const firstStart = new Date(params.firstStart);
+  const firstEnd = getMeetingEndDate(
+    params.firstStart,
+    params.firstDurationMinutes,
+  );
+
+  const secondStart = new Date(params.secondStart);
+  const secondEnd = getMeetingEndDate(
+    params.secondStart,
+    params.secondDurationMinutes,
+  );
+
+  return firstStart < secondEnd && secondStart < firstEnd;
+}
+
+async function hasMeetingConflict(params: {
+  tenantId: string;
+  meetingAt: string;
+  durationMinutes: number;
+  excludeMeetingId?: string;
+}): Promise<boolean> {
+  const meetings = await resolveMeetingRows(
+    meetingsTable()
+      .select("*")
+      .eq("tenant_id", params.tenantId)
+      .order("meeting_at", { ascending: true })
+      .limit(500),
+  );
+
+  return meetings.some((meeting) => {
+    if (
+      meeting.id === params.excludeMeetingId ||
+      meeting.status === "completed" ||
+      meeting.status === "canceled"
+    ) {
+      return false;
+    }
+
+    return meetingsOverlap({
+      firstStart: params.meetingAt,
+      firstDurationMinutes: params.durationMinutes,
+      secondStart: meeting.meeting_at,
+      secondDurationMinutes: meeting.duration_minutes,
+    });
+  });
+}
+
 function getTodayRange(): {
   start: Date;
   end: Date;
@@ -272,7 +342,9 @@ function hydrateMeetings(params: {
 
   return params.meetings.map((meeting) => {
     const legalCase = meeting.case_id ? casesById.get(meeting.case_id) : null;
-    const client = meeting.client_id ? clientsById.get(meeting.client_id) : null;
+    const client = meeting.client_id
+      ? clientsById.get(meeting.client_id)
+      : null;
 
     return {
       ...meeting,
@@ -546,6 +618,29 @@ export async function createLawyerMeetingAction(
   }
 
   const { tenantId, userId } = await getLawyerTenantId();
+
+  if (isMeetingInThePast(meetingAt)) {
+    redirect(
+      `/dashboard/meetings?error=${encodeURIComponent(
+        "A reunião precisa ser marcada para uma data e horário futuros.",
+      )}`,
+    );
+  }
+
+  const hasConflict = await hasMeetingConflict({
+    tenantId,
+    meetingAt,
+    durationMinutes,
+  });
+
+  if (hasConflict) {
+    redirect(
+      `/dashboard/meetings?error=${encodeURIComponent(
+        "Já existe uma reunião nesse intervalo. Escolha outro horário.",
+      )}`,
+    );
+  }
+
   const admin = createSupabaseAdminClient();
 
   const { data: legalCase, error: caseError } = await admin
@@ -626,6 +721,28 @@ export async function requestClientMeetingAction(
     redirect("/dashboard/client");
   }
 
+  if (isMeetingInThePast(meetingAt)) {
+    redirect(
+      `/dashboard/client/meetings?error=${encodeURIComponent(
+        "A reunião precisa ser solicitada para uma data e horário futuros.",
+      )}`,
+    );
+  }
+
+  const hasConflict = await hasMeetingConflict({
+    tenantId: client.tenant_id,
+    meetingAt,
+    durationMinutes,
+  });
+
+  if (hasConflict) {
+    redirect(
+      `/dashboard/client/meetings?error=${encodeURIComponent(
+        "O escritório já possui um compromisso nesse intervalo. Escolha outro horário.",
+      )}`,
+    );
+  }
+
   const admin = createSupabaseAdminClient();
 
   const { data: legalCase, error: caseError } = await admin
@@ -701,6 +818,31 @@ export async function updateMeetingStatusAction(
 
   if (!meeting) {
     redirect("/dashboard/meetings?error=Reunião não encontrada.");
+  }
+
+  if (status === "scheduled") {
+    if (isMeetingInThePast(meeting.meeting_at)) {
+      redirect(
+        `/dashboard/meetings?error=${encodeURIComponent(
+          "Não é possível confirmar uma reunião em data ou horário passado.",
+        )}`,
+      );
+    }
+
+    const hasConflict = await hasMeetingConflict({
+      tenantId,
+      meetingAt: meeting.meeting_at,
+      durationMinutes: meeting.duration_minutes,
+      excludeMeetingId: meeting.id,
+    });
+
+    if (hasConflict) {
+      redirect(
+        `/dashboard/meetings?error=${encodeURIComponent(
+          "Não foi possível confirmar: já existe outra reunião nesse intervalo.",
+        )}`,
+      );
+    }
   }
 
   await resolveMeetingRow(

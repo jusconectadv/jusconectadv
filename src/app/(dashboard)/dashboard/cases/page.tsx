@@ -73,7 +73,9 @@ function limitText(value: string | null, maxLength: number): string {
   return `${value.slice(0, maxLength).trim()}...`;
 }
 
-export default async function CasesPage({ searchParams }: CasesPageProps) {
+export default async function CasesPage({
+  searchParams,
+}: CasesPageProps) {
   const query = await searchParams;
   const cases = await listCases();
 
@@ -94,10 +96,12 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
       selectedStatus === "all" ||
       legalCase.status === selectedStatus ||
       (selectedStatus === "closed" &&
-        (legalCase.status === "closed" || legalCase.status === "resolved"));
+        (legalCase.status === "closed" ||
+          legalCase.status === "resolved"));
 
     const matchesPriority =
-      selectedPriority === "all" || legalCase.priority === selectedPriority;
+      selectedPriority === "all" ||
+      legalCase.priority === selectedPriority;
 
     return matchesSearch && matchesStatus && matchesPriority;
   });
@@ -118,7 +122,8 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
 
   const closedCases = cases.filter(
     (legalCase) =>
-      legalCase.status === "closed" || legalCase.status === "resolved",
+      legalCase.status === "closed" ||
+      legalCase.status === "resolved",
   ).length;
 
   const urgentCases = cases.filter(
@@ -126,7 +131,9 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
   ).length;
 
   const hasActiveFilters =
-    Boolean(search) || selectedStatus !== "all" || selectedPriority !== "all";
+    Boolean(search) ||
+    selectedStatus !== "all" ||
+    selectedPriority !== "all";
 
   return (
     <section className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -142,8 +149,8 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[#B8C2CC]">
-              Gerencie, filtre e acompanhe os atendimentos jurídicos vinculados
-              aos clientes do escritório.
+              Gerencie, filtre e acompanhe os atendimentos jurídicos
+              vinculados aos clientes do escritório.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3">
@@ -177,33 +184,57 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
               </p>
 
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-[#0B1D2D] p-4">
-                  <p className="text-[11px] text-[#8FA0AE]">Total</p>
+                <Link
+                  href="/dashboard/cases?status=all&priority=all"
+                  className="rounded-2xl bg-[#0B1D2D] p-4 transition hover:-translate-y-0.5 hover:bg-[#132D44]"
+                >
+                  <p className="text-[11px] text-[#8FA0AE]">
+                    Total
+                  </p>
+
                   <p className="mt-1 text-2xl font-bold text-white">
                     {totalCases}
                   </p>
-                </div>
+                </Link>
 
-                <div className="rounded-2xl bg-[#0B1D2D] p-4">
-                  <p className="text-[11px] text-[#8FA0AE]">Em andamento</p>
+                <Link
+                  href="/dashboard/cases?status=in_progress&priority=all"
+                  className="rounded-2xl bg-[#0B1D2D] p-4 transition hover:-translate-y-0.5 hover:bg-[#132D44]"
+                >
+                  <p className="text-[11px] text-[#8FA0AE]">
+                    Em andamento
+                  </p>
+
                   <p className="mt-1 text-2xl font-bold text-white">
                     {inProgressCases}
                   </p>
-                </div>
+                </Link>
 
-                <div className="rounded-2xl bg-[#0B1D2D] p-4">
-                  <p className="text-[11px] text-[#8FA0AE]">Aguardando</p>
+                <Link
+                  href="/dashboard/cases?status=waiting_client&priority=all"
+                  className="rounded-2xl bg-[#0B1D2D] p-4 transition hover:-translate-y-0.5 hover:bg-[#132D44]"
+                >
+                  <p className="text-[11px] text-[#8FA0AE]">
+                    Aguardando
+                  </p>
+
                   <p className="mt-1 text-2xl font-bold text-[#C89B4A]">
                     {waitingClientCases}
                   </p>
-                </div>
+                </Link>
 
-                <div className="rounded-2xl bg-[#0B1D2D] p-4">
-                  <p className="text-[11px] text-[#8FA0AE]">Urgentes</p>
+                <Link
+                  href="/dashboard/cases?status=all&priority=urgent"
+                  className="rounded-2xl bg-[#0B1D2D] p-4 transition hover:-translate-y-0.5 hover:bg-[#132D44]"
+                >
+                  <p className="text-[11px] text-[#8FA0AE]">
+                    Urgentes
+                  </p>
+
                   <p className="mt-1 text-2xl font-bold text-red-300">
                     {urgentCases}
                   </p>
-                </div>
+                </Link>
               </div>
             </div>
           </div>
@@ -211,8 +242,13 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
       </div>
 
       <section className="grid gap-4 md:grid-cols-5">
-        <div className="rounded-3xl border border-[#D8D2C7] bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-[#5B6472]">Total</p>
+        <Link
+          href="/dashboard/cases?status=all&priority=all"
+          className="rounded-3xl border border-[#D8D2C7] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#C89B4A]/60 hover:shadow-md"
+        >
+          <p className="text-sm font-semibold text-[#5B6472]">
+            Total
+          </p>
 
           <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
             {totalCases}
@@ -221,10 +257,15 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
           <p className="mt-2 text-xs text-[#5B6472]">
             Casos cadastrados
           </p>
-        </div>
+        </Link>
 
-        <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-blue-700">Novos</p>
+        <Link
+          href="/dashboard/cases?status=new&priority=all"
+          className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+        >
+          <p className="text-sm font-semibold text-blue-700">
+            Novos
+          </p>
 
           <strong className="mt-2 block text-3xl font-bold text-blue-700">
             {newCases}
@@ -233,9 +274,12 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
           <p className="mt-2 text-xs text-[#5B6472]">
             Ainda não iniciados
           </p>
-        </div>
+        </Link>
 
-        <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm">
+        <Link
+          href="/dashboard/cases?status=in_progress&priority=all"
+          className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+        >
           <p className="text-sm font-semibold text-emerald-700">
             Em andamento
           </p>
@@ -247,9 +291,12 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
           <p className="mt-2 text-xs text-[#5B6472]">
             Atendimento ativo
           </p>
-        </div>
+        </Link>
 
-        <div className="rounded-3xl border border-[#E7D7B5] bg-white p-5 shadow-sm">
+        <Link
+          href="/dashboard/cases?status=waiting_client&priority=all"
+          className="rounded-3xl border border-[#E7D7B5] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#C89B4A] hover:shadow-md"
+        >
           <p className="text-sm font-semibold text-[#9E762D]">
             Aguardando
           </p>
@@ -261,10 +308,15 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
           <p className="mt-2 text-xs text-[#5B6472]">
             Retorno do cliente
           </p>
-        </div>
+        </Link>
 
-        <div className="rounded-3xl border border-[#D8D2C7] bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-[#5B6472]">Finalizados</p>
+        <Link
+          href="/dashboard/cases?status=closed&priority=all"
+          className="rounded-3xl border border-[#D8D2C7] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#C89B4A]/60 hover:shadow-md"
+        >
+          <p className="text-sm font-semibold text-[#5B6472]">
+            Finalizados
+          </p>
 
           <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
             {closedCases}
@@ -273,7 +325,7 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
           <p className="mt-2 text-xs text-[#5B6472]">
             Encerrados/resolvidos
           </p>
-        </div>
+        </Link>
       </section>
 
       <section className="overflow-hidden rounded-[1.75rem] border border-[#D8D2C7] bg-white shadow-sm">
@@ -336,7 +388,10 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
               className="min-h-12 w-full rounded-2xl border border-[#D8D2C7] bg-white px-4 py-3 text-sm text-[#0B1D2D] outline-none transition focus:border-[#C89B4A] focus:ring-4 focus:ring-[#C89B4A]/10"
             >
               {statusOptions.map((status) => (
-                <option key={status.value} value={status.value}>
+                <option
+                  key={status.value}
+                  value={status.value}
+                >
                   {status.label}
                 </option>
               ))}
@@ -358,7 +413,10 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
               className="min-h-12 w-full rounded-2xl border border-[#D8D2C7] bg-white px-4 py-3 text-sm text-[#0B1D2D] outline-none transition focus:border-[#C89B4A] focus:ring-4 focus:ring-[#C89B4A]/10"
             >
               {priorityOptions.map((priority) => (
-                <option key={priority.value} value={priority.value}>
+                <option
+                  key={priority.value}
+                  value={priority.value}
+                >
                   {priority.label}
                 </option>
               ))}
@@ -386,7 +444,8 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
             </h2>
 
             <p className="mt-1 text-sm text-[#5B6472]">
-              {filteredCases.length} de {totalCases} caso(s) exibido(s).
+              {filteredCases.length} de {totalCases} caso(s)
+              exibido(s).
             </p>
           </div>
 
@@ -406,8 +465,8 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
               </h3>
 
               <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-[#5B6472]">
-                Ajuste os filtros ou crie um novo atendimento jurídico para o
-                cliente.
+                Ajuste os filtros ou crie um novo atendimento
+                jurídico para o cliente.
               </p>
 
               <Link
@@ -428,11 +487,18 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap gap-2">
-                      <CaseStatusBadge status={legalCase.status} />
-                      <CasePriorityBadge priority={legalCase.priority} />
+                      <CaseStatusBadge
+                        status={legalCase.status}
+                      />
+
+                      <CasePriorityBadge
+                        priority={legalCase.priority}
+                      />
                     </div>
 
-                    <Link href={`/dashboard/cases/${legalCase.id}`}>
+                    <Link
+                      href={`/dashboard/cases/${legalCase.id}`}
+                    >
                       <h3 className="mt-3 text-lg font-bold text-[#0B1D2D] transition hover:text-[#9E762D]">
                         {legalCase.title}
                       </h3>
@@ -441,21 +507,34 @@ export default async function CasesPage({ searchParams }: CasesPageProps) {
                     <p className="mt-2 text-sm font-semibold text-[#5B6472]">
                       Cliente:{" "}
                       <span className="text-[#0B1D2D]">
-                        {legalCase.client_name ?? "Cliente não localizado"}
+                        {legalCase.client_name ??
+                          "Cliente não localizado"}
                       </span>
                     </p>
 
                     <p className="mt-3 line-clamp-2 text-sm leading-6 text-[#5B6472]">
-                      {limitText(legalCase.description, 220)}
+                      {limitText(
+                        legalCase.description,
+                        220,
+                      )}
                     </p>
 
                     <div className="mt-4 flex flex-wrap gap-3 text-xs text-[#8FA0AE]">
-                      <span>Criado em {formatDate(legalCase.created_at)}</span>
-
-                      <span>Status: {getStatusLabel(legalCase.status)}</span>
+                      <span>
+                        Criado em{" "}
+                        {formatDate(legalCase.created_at)}
+                      </span>
 
                       <span>
-                        Prioridade: {getPriorityLabel(legalCase.priority)}
+                        Status:{" "}
+                        {getStatusLabel(legalCase.status)}
+                      </span>
+
+                      <span>
+                        Prioridade:{" "}
+                        {getPriorityLabel(
+                          legalCase.priority,
+                        )}
                       </span>
                     </div>
                   </div>

@@ -216,81 +216,172 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-5">
-        <Link
-          href="/dashboard/clients"
-          className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
-        >
-          <p className="text-sm font-semibold text-emerald-700">
-            Clientes ativos
+      <section>
+        <div className="mb-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9E762D]">
+            Base de clientes
           </p>
 
-          <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
-            {overview.summary.active_clients}
-          </strong>
+          <h2 className="mt-1 text-xl font-bold text-[#0B1D2D]">
+            Indicadores de clientes
+          </h2>
 
-          <p className="mt-2 text-xs text-[#5B6472]">
-            {overview.summary.archived_clients} arquivado(s)
+          <p className="mt-1 text-sm text-[#5B6472]">
+            Clique em um indicador para abrir a listagem com o filtro aplicado.
           </p>
-        </Link>
+        </div>
 
-        <Link
-          href="/dashboard/clients?status=all"
-          className="rounded-3xl border border-[#D8D2C7] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#C89B4A]/50 hover:shadow-md"
-        >
-          <p className="text-sm font-semibold text-[#5B6472]">
-            Total de clientes
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <Link
+            href="/dashboard/clients?status=all"
+            className="rounded-3xl border border-[#D8D2C7] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#C89B4A]/60 hover:shadow-md"
+          >
+            <p className="text-sm font-semibold text-[#5B6472]">
+              Total de clientes
+            </p>
+
+            <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
+              {overview.summary.total_clients}
+            </strong>
+
+            <p className="mt-2 text-xs text-[#5B6472]">
+              Ativos e arquivados
+            </p>
+          </Link>
+
+          <Link
+            href="/dashboard/clients?status=active"
+            className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+          >
+            <p className="text-sm font-semibold text-emerald-700">
+              Clientes ativos
+            </p>
+
+            <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
+              {overview.summary.active_clients}
+            </strong>
+
+            <p className="mt-2 text-xs text-[#5B6472]">
+              Cadastros disponíveis
+            </p>
+          </Link>
+
+          <Link
+            href="/dashboard/clients?status=archived"
+            className="rounded-3xl border border-red-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-red-300 hover:shadow-md"
+          >
+            <p className="text-sm font-semibold text-red-700">
+              Clientes arquivados
+            </p>
+
+            <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
+              {overview.summary.archived_clients}
+            </strong>
+
+            <p className="mt-2 text-xs text-[#5B6472]">
+              Cadastros inativos
+            </p>
+          </Link>
+
+          <Link
+            href="/dashboard/clients?status=all&type=PF"
+            className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+          >
+            <p className="text-sm font-semibold text-blue-700">
+              Pessoas físicas
+            </p>
+
+            <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
+              {overview.summary.pf_clients}
+            </strong>
+
+            <p className="mt-2 text-xs text-[#5B6472]">
+              Clientes cadastrados como PF
+            </p>
+          </Link>
+
+          <Link
+            href="/dashboard/clients?status=all&type=PJ"
+            className="rounded-3xl border border-purple-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-md"
+          >
+            <p className="text-sm font-semibold text-purple-700">
+              Pessoas jurídicas
+            </p>
+
+            <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
+              {overview.summary.pj_clients}
+            </strong>
+
+            <p className="mt-2 text-xs text-[#5B6472]">
+              Clientes cadastrados como PJ
+            </p>
+          </Link>
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9E762D]">
+            Operação
           </p>
 
-          <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
-            {overview.summary.total_clients}
-          </strong>
+          <h2 className="mt-1 text-xl font-bold text-[#0B1D2D]">
+            Indicadores operacionais
+          </h2>
+        </div>
 
-          <p className="mt-2 text-xs text-[#5B6472]">Ativos e arquivados</p>
-        </Link>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Link
+            href="/dashboard/cases"
+            className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+          >
+            <p className="text-sm font-semibold text-blue-700">
+              Total de casos
+            </p>
 
-        <Link
-          href="/dashboard/cases"
-          className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
-        >
-          <p className="text-sm font-semibold text-blue-700">Total de casos</p>
+            <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
+              {overview.summary.total_cases}
+            </strong>
 
-          <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
-            {overview.summary.total_cases}
-          </strong>
+            <p className="mt-2 text-xs text-[#5B6472]">
+              Base completa do escritório
+            </p>
+          </Link>
 
-          <p className="mt-2 text-xs text-[#5B6472]">
-            Base completa do escritório
-          </p>
-        </Link>
+          <Link
+            href="/dashboard/tasks"
+            className="rounded-3xl border border-red-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-red-300 hover:shadow-md"
+          >
+            <p className="text-sm font-semibold text-red-700">
+              Tarefas atrasadas
+            </p>
 
-        <Link
-          href="/dashboard/tasks"
-          className="rounded-3xl border border-red-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-red-200 hover:shadow-md"
-        >
-          <p className="text-sm font-semibold text-red-700">
-            Tarefas atrasadas
-          </p>
+            <strong className="mt-2 block text-3xl font-bold text-red-700">
+              {overview.summary.overdue_tasks}
+            </strong>
 
-          <strong className="mt-2 block text-3xl font-bold text-red-700">
-            {overview.summary.overdue_tasks}
-          </strong>
+            <p className="mt-2 text-xs text-[#5B6472]">
+              Prazos críticos
+            </p>
+          </Link>
 
-          <p className="mt-2 text-xs text-[#5B6472]">Prazos críticos</p>
-        </Link>
+          <Link
+            href="/dashboard/tasks"
+            className="rounded-3xl border border-[#E7D7B5] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#C89B4A] hover:shadow-md"
+          >
+            <p className="text-sm font-semibold text-[#9E762D]">
+              Vencem hoje
+            </p>
 
-        <Link
-          href="/dashboard/tasks"
-          className="rounded-3xl border border-[#E7D7B5] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#C89B4A] hover:shadow-md"
-        >
-          <p className="text-sm font-semibold text-[#9E762D]">Vencem hoje</p>
+            <strong className="mt-2 block text-3xl font-bold text-[#C89B4A]">
+              {overview.summary.due_today_tasks}
+            </strong>
 
-          <strong className="mt-2 block text-3xl font-bold text-[#C89B4A]">
-            {overview.summary.due_today_tasks}
-          </strong>
-
-          <p className="mt-2 text-xs text-[#5B6472]">Pendências para hoje</p>
-        </Link>
+            <p className="mt-2 text-xs text-[#5B6472]">
+              Pendências para hoje
+            </p>
+          </Link>
+        </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-4">
@@ -347,7 +438,9 @@ export default async function DashboardPage() {
           href="/dashboard/cases?status=closed"
           className="rounded-3xl border border-[#D8D2C7] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#C89B4A]/50 hover:shadow-md"
         >
-          <p className="text-sm font-semibold text-[#5B6472]">Finalizados</p>
+          <p className="text-sm font-semibold text-[#5B6472]">
+            Finalizados
+          </p>
 
           <strong className="mt-2 block text-3xl font-bold text-[#0B1D2D]">
             {overview.summary.closed_cases}
@@ -425,7 +518,7 @@ export default async function DashboardPage() {
               </h2>
 
               <p className="mt-1 text-sm text-[#5B6472]">
-                Últimos atendimentos registrados.
+                Últimos atendimentos em aberto.
               </p>
             </div>
 
@@ -439,12 +532,15 @@ export default async function DashboardPage() {
 
           {overview.latest_cases.length === 0 ? (
             <div className="p-6 text-sm text-[#5B6472]">
-              Nenhum caso cadastrado ainda.
+              Nenhum caso em aberto cadastrado.
             </div>
           ) : (
             <div className="divide-y divide-[#ECE7DD]">
               {overview.latest_cases.map((caseItem) => (
-                <article key={caseItem.id} className="p-5 transition hover:bg-[#F8F6F1]">
+                <article
+                  key={caseItem.id}
+                  className="p-5 transition hover:bg-[#F8F6F1]"
+                >
                   <div className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <CaseStatusBadge status={caseItem.status} />
@@ -466,9 +562,12 @@ export default async function DashboardPage() {
 
                     <div className="flex flex-wrap items-center gap-2 text-xs text-[#5B6472]">
                       <span>
-                        Cliente: {caseItem.client_name ?? "Cliente não informado"}
+                        Cliente:{" "}
+                        {caseItem.client_name ?? "Cliente não informado"}
                       </span>
+
                       <span>•</span>
+
                       <span>{formatDateTime(caseItem.created_at)}</span>
                     </div>
                   </div>
@@ -485,7 +584,7 @@ export default async function DashboardPage() {
                 Prazos
               </p>
 
-              <h2 className="mt-1 text-lg font-bold text-[#0B1D2D]">
+              <h2 className="mt-1 text-lg font-bold text-[#0B1D2C]">
                 Tarefas críticas
               </h2>
 
@@ -509,7 +608,10 @@ export default async function DashboardPage() {
           ) : (
             <div className="divide-y divide-[#ECE7DD]">
               {overview.urgent_tasks.map((task) => (
-                <article key={task.id} className="p-5 transition hover:bg-[#F8F6F1]">
+                <article
+                  key={task.id}
+                  className="p-5 transition hover:bg-[#F8F6F1]"
+                >
                   <div className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span
@@ -532,6 +634,7 @@ export default async function DashboardPage() {
 
                     <div className="text-sm leading-6 text-[#5B6472]">
                       <p>Caso: {task.case_title}</p>
+
                       <p>
                         Cliente: {task.client_name ?? "Cliente não informado"}
                       </p>
@@ -576,7 +679,10 @@ export default async function DashboardPage() {
           ) : (
             <div className="divide-y divide-[#ECE7DD]">
               {overview.latest_messages.map((message) => (
-                <article key={message.id} className="p-5 transition hover:bg-[#F8F6F1]">
+                <article
+                  key={message.id}
+                  className="p-5 transition hover:bg-[#F8F6F1]"
+                >
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2 text-xs text-[#5B6472]">
                       <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
@@ -598,7 +704,8 @@ export default async function DashboardPage() {
                     </p>
 
                     <p className="text-xs text-[#5B6472]">
-                      Cliente: {message.client_name ?? "Cliente não informado"}
+                      Cliente:{" "}
+                      {message.client_name ?? "Cliente não informado"}
                     </p>
                   </div>
                 </article>
@@ -638,7 +745,10 @@ export default async function DashboardPage() {
           ) : (
             <div className="divide-y divide-[#ECE7DD]">
               {overview.latest_documents.map((document) => (
-                <article key={document.id} className="p-5 transition hover:bg-[#F8F6F1]">
+                <article
+                  key={document.id}
+                  className="p-5 transition hover:bg-[#F8F6F1]"
+                >
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2 text-xs text-[#5B6472]">
                       <span className="rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 font-semibold text-purple-700">
@@ -660,7 +770,8 @@ export default async function DashboardPage() {
                     </p>
 
                     <p className="text-xs text-[#5B6472]">
-                      Cliente: {document.client_name ?? "Cliente não informado"}
+                      Cliente:{" "}
+                      {document.client_name ?? "Cliente não informado"}
                     </p>
                   </div>
                 </article>

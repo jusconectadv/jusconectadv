@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { SubmitButton } from "@/src/components/shared/SubmitButton";
 import { getClientServiceGuide } from "@/src/lib/client-service-guides";
 import { createAuthenticatedClientCaseAction } from "@/src/services/client-dashboard";
 
@@ -340,13 +341,13 @@ export default async function NewClientCasePage({
             >
               Cancelar
             </Link>
-
-            <button
-              type="submit"
+            
+            <SubmitButton
+              pendingText="Enviando solicitação..."
               className="inline-flex items-center justify-center rounded-xl bg-[#C89B4A] px-6 py-3 text-sm font-bold text-[#0B1D2D] transition hover:bg-[#D9AE5F]"
             >
               Enviar solicitação
-            </button>
+            </SubmitButton>
           </div>
         </section>
       </form>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { SubmitButton } from "@/src/components/shared/SubmitButton";
 import { CasePriorityBadge } from "@/src/components/cases/CasePriorityBadge";
 import { CaseStatusBadge } from "@/src/components/cases/CaseStatusBadge";
 import {
@@ -291,12 +292,12 @@ export default async function ClientCaseDetailPage({
                 20MB.
               </p>
 
-              <button
-                type="submit"
+              <SubmitButton
+                pendingText="Enviando documento(s)..."
                 className="w-full rounded-xl bg-[#C89B4A] px-5 py-3 text-sm font-bold text-[#0B1D2D] transition hover:bg-[#D9AE5F]"
               >
                 Enviar documento(s)
-              </button>
+              </SubmitButton>
             </form>
           </div>
 
